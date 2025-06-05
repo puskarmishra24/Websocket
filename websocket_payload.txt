@@ -1,0 +1,40 @@
+# Malformed JSON to test parsing errors
+{
+  "type": "invalid_json",
+  "data": "unclosed bracket
+
+# XSS attempt to check for reflected scripts
+<script>alert('XSS')</script>
+
+# Large payload to test buffer overflow or DoS
+{"type": "large_payload", "data": "A" * 1000000}
+
+# Invalid WebSocket frame (binary data)
+\x00\xFF\xFE\xFD
+
+# Command injection attempt
+{"command": "whoami; ls"}
+
+# SQL injection attempt
+{"query": "SELECT * FROM users WHERE id = '1' OR '1'='1'"}
+
+# Expression evaluation attempt
+${{7*7}}
+
+# Null bytes to test input sanitization
+{"data": "\0\0\0"}
+
+# Oversized header-like input
+{"headers": "X" * 5000}
+
+# Invalid UTF-8 sequence
+{"data": "\xFF\xFE\xFD"}
+
+# Empty message
+{}
+
+# Malformed protocol message
+GET / HTTP/1.1
+Host: example.com
+Upgrade: websocket
+Connection: Upgrade
