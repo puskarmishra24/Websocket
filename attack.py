@@ -2,11 +2,9 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
 import time
-from termcolor import colored
 import websocket
-import requests
-import urllib3
 import logging
+from termcolor import colored
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -19,7 +17,7 @@ def load_payload(file_name):
     with open(file_path, "r", encoding='utf-8', errors='ignore') as file:
         return [line.strip() for line in file.readlines() if line.strip()]
 
-def attack_website(zap, target_url, websocket_urls, attack_type="all"):
+def attack_website(target_url, websocket_urls, attack_type="all"):
     """Main function to handle attack logic."""
     mode = attack_type
     websocket_payloads = load_payload("websocket_payload.txt")
@@ -32,29 +30,6 @@ def attack_website(zap, target_url, websocket_urls, attack_type="all"):
 
     return vulnerabilities
 
-def perform_attack(zap, target_url, payloads, attack_type):
-    """Perform the attack using the provided payloads."""
-    def send_payload(payload):
-        try:
-            response = zap.urlopen(f"{target_url}?input={payload}", timeout=10)
-            time.sleep(0.1)
-            return zap.core.alerts()
-        except (requests.exceptions.SSLError, urllib3.exceptions.SSLError) as ssl_err:
-            logging.error(f"SSL error for URL {target_url}?input={payload}: {ssl_err}")
-            return []
-        except requests.exceptions.RequestException as req_err:
-            logging.error(f"Request error for URL {target_url}?input={payload}: {req_err}")
-            return []
-
-    vulnerabilities = []
-    with ThreadPoolExecutor(max_workers=10) as executor:
-        results = list(tqdm(executor.map(send_payload, payloads), total=len(payloads)))
-
-    for result in results:
-        vulnerabilities.extend(result)
-
-    return vulnerabilities
-
 def perform_websocket_tests(websocket_urls, payloads):
     """Perform WebSocket-specific tests."""
     vulnerabilities = []
@@ -63,7 +38,7 @@ def perform_websocket_tests(websocket_urls, payloads):
         """Test for missing origin checks."""
         try:
             ws = websocket.WebSocket()
-            ws.connect(ws_url, origin="http://malicious-site.com")
+            ws.connect(ws_url, origin="http://malicious-site.com", timeout=5)
             ws.send("test")
             response = ws.recv()
             ws.close()
@@ -75,14 +50,15 @@ def perform_websocket_tests(websocket_urls, payloads):
                 'affected_url': ws_url,
                 'impact': 'Allows unauthorized access, potentially leading to session hijacking or data exposure.'
             }
-        except websocket.WebSocketException:
+        except websocket.WebSocketException as e:
+            print(colored(f"Origin check failed for {ws_url}: {e}", "yellow"))
             return None
 
     def test_authentication(ws_url):
         """Test for weak or missing authentication."""
         try:
             ws = websocket.WebSocket()
-            ws.connect(ws_url)
+            ws.connect(ws_url, timeout=5)
             ws.send("test")
             response = ws.recv()
             ws.close()
@@ -94,14 +70,15 @@ def perform_websocket_tests(websocket_urls, payloads):
                 'affected_url': ws_url,
                 'impact': 'Unauthorized users can access WebSocket data, leading to data leakage or manipulation.'
             }
-        except websocket.WebSocketException:
+        except websocket.WebSocketException as e:
+            print(colored(f"Authentication test failed for {ws_url}: {e}", "yellow"))
             return None
 
     def test_fuzzing(ws_url, payload):
         """Perform protocol fuzzing."""
         try:
             ws = websocket.WebSocket()
-            ws.connect(ws_url)
+            ws.connect(ws_url, timeout=5)
             ws.send(payload)
             response = ws.recv()
             ws.close()
@@ -115,7 +92,8 @@ def perform_websocket_tests(websocket_urls, payloads):
                     'impact': 'Malformed messages could crash the server or expose sensitive data.'
                 }
             return None
-        except websocket.WebSocketException:
+        except websocket.WebSocketException as e:
+            print(colored(f"Fuzzing test failed for {ws_url}: {e}", "yellow"))
             return None
 
     with ThreadPoolExecutor(max_workers=5) as executor:

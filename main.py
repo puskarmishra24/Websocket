@@ -1,24 +1,15 @@
 from datetime import datetime
 import time
-import requests
+import asyncio
 from termcolor import colored
 import crawler
 import attack
 import report_generator
-from connection import connect_to_zap, get_zap_version
 
-def main():
-    zap_url = "https://localhost:8080"
-    api_key = "f6begf22g26ccrrqt2ti8e7mpa"
-    print(colored("Initializing connection to ZAP...", "blue"))
-    zap = connect_to_zap(zap_url)
-    if not zap:
-        print(colored("Failed to connect to ZAP after 3 retries.", "red"))
-        return
-    print(colored(f"Connection successful! ZAP Version: {get_zap_version(zap)}", "green"))
-    create_zap_session(zap_url, api_key)
-    target_urls = input("Enter the URLs you want to test, separated by commas: ").strip().split(',')
-    
+async def main():
+    print(colored("Initializing WebSocket vulnerability scanner for real-world web applications...", "blue"))
+    target_urls = input("Enter the URLs you want to test (e.g., https://example.com), separated by commas: ").strip().split(',')
+
     combined_results = {
         'scan_start_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'total_scan_duration': 0,
@@ -33,25 +24,28 @@ def main():
 
     for target_url in target_urls:
         target_url = target_url.strip()
+        if not target_url.startswith(('http://', 'https://')):
+            print(colored(f"Invalid URL: {target_url}. Skipping. Please use http:// or https://", "red"))
+            continue
         print(colored(f"\nProcessing URL: {target_url}", "cyan"))
         start_time = time.time()
-        print(colored("Starting website crawl...", "blue"))
-        crawl_data = crawler.crawl_website(zap, target_url)
+        print(colored("Starting website crawl with Playwright...", "blue"))
+        crawl_data = await crawler.crawl_website(target_url)
         print(colored(f"Crawling complete! {crawl_data['num_crawls']} URLs crawled, {crawl_data['num_websockets']} WebSocket endpoints found.", "green"))
         perform_attack = input(f"Do you want to attack the site {target_url}? (yes/no): ").strip().lower()
         vulnerabilities = []
         attack_type = ""
 
         if perform_attack == "yes":
-            attack_mode = input("1. WebSocket Tests): ").strip()
+            attack_mode = input("1. WebSocket Tests: ").strip()
             attack_types = {
                 "1": ("WebSocket Tests", "websocket"),
             }
-            
+
             if attack_mode in attack_types:
                 attack_type, attack_code = attack_types[attack_mode]
                 print(colored(f"Starting {attack_type}...", "yellow"))
-                vulnerabilities = attack.attack_website(zap, target_url, crawl_data['websocket_urls'], attack_type=attack_code)
+                vulnerabilities = attack.attack_website(target_url, crawl_data['websocket_urls'], attack_type=attack_code)
 
         end_time = time.time()
         scan_duration = round(end_time - start_time, 2)
@@ -85,7 +79,7 @@ def main():
 
     print(colored("\nGenerating combined report...", "yellow"))
     combined_results['scan_end_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    
+
     report_generator.generate_combined_report(combined_results)
     print(colored("\nFinal Summary:", "green"))
     print(f"Total URLs scanned: {len(combined_results['urls_scanned'])}")
@@ -95,22 +89,5 @@ def main():
     print(f"- Medium Severity: {combined_results['total_vulnerabilities']['Medium']}")
     print(f"- Low Severity: {combined_results['total_vulnerabilities']['Low']}")
 
-def create_zap_session(zap_url, api_key):
-    """Creates a new session in ZAP"""
-    params = {
-        'name': 'new_session',
-        'overwrite': 'true',
-        'apikey': api_key
-    }
-
-    try:
-        response = requests.get(f'{zap_url}/JSON/core/action/newSession/', params=params, verify=False, timeout=30)
-        if response.status_code == 200:
-            print(colored("New session created successfully.", "green"))
-        else:
-            print(colored(f"Failed to create session. Response: {response.json()}", "red"))
-    except requests.exceptions.RequestException as e:
-        print(colored(f"Error creating session: {e}", "red"))
-
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
