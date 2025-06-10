@@ -7,6 +7,9 @@ import logging
 from base64 import b64encode
 import socket
 from urllib.parse import urlparse
+from termcolor import colored
+import requests
+import urllib3
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
