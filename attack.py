@@ -7,6 +7,9 @@ import websocket
 import requests
 import urllib3
 import logging
+from base64 import b64encode
+import socket
+from urllib.parse import urlparse
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -55,11 +58,7 @@ def perform_attack(zap, target_url, payloads, attack_type):
 
     return vulnerabilities
 
-def perform_websocket_tests(websocket_urls, payloads):
-    """Perform WebSocket-specific tests."""
-    vulnerabilities = []
-
-    def test_origin_check(ws_url):
+def test_origin_check(ws_url):
         """Test for missing origin checks."""
         try:
             ws = websocket.WebSocket()
@@ -77,8 +76,8 @@ def perform_websocket_tests(websocket_urls, payloads):
             }
         except websocket.WebSocketException:
             return None
-
-    def test_authentication(ws_url):
+        
+def test_authentication(ws_url):
         """Test for weak or missing authentication."""
         try:
             ws = websocket.WebSocket()
@@ -97,7 +96,7 @@ def perform_websocket_tests(websocket_urls, payloads):
         except websocket.WebSocketException:
             return None
 
-    def test_fuzzing(ws_url, payload):
+def test_fuzzing(ws_url, payload):
         """Perform protocol fuzzing."""
         try:
             ws = websocket.WebSocket()
@@ -117,16 +116,332 @@ def perform_websocket_tests(websocket_urls, payloads):
             return None
         except websocket.WebSocketException:
             return None
+        
+def send_raw_handshake(host, port, request_headers):
+    """Send a raw WebSocket handshake to the server and capture response."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((host, port))
+    s.send(request_headers.encode())
+    response = s.recv(4096).decode()
+    s.close()
+    return response
+
+def test_omit_sec_websocket_key(host, port, path="/"):
+    req = f"""GET {path} HTTP/1.1\r
+Host: {host}\r
+Upgrade: websocket\r
+Connection: Upgrade\r
+Sec-WebSocket-Version: 13\r
+\r
+"""
+    response = send_raw_handshake(host, port, req)
+    return {
+        'name': 'Omit Sec-WebSocket-Key',
+        'result': 'Vulnerable' if "101 Switching Protocols" in response else 'Secure',
+        'details': response
+    }
+
+def test_non_base64_sec_websocket_key(host, port, path="/"):
+    req = f"""GET {path} HTTP/1.1\r
+Host: {host}\r
+Upgrade: websocket\r
+Connection: Upgrade\r
+Sec-WebSocket-Key: NotBase64!!\r
+Sec-WebSocket-Version: 13\r
+\r
+"""
+    response = send_raw_handshake(host, port, req)
+    return {
+        'name': 'Non-Base64 Sec-WebSocket-Key',
+        'result': 'Vulnerable' if "101 Switching Protocols" in response else 'Secure',
+        'details': response
+    }
+
+def test_oversized_sec_websocket_key(host, port, path="/"):
+    big_key = b64encode(b"A" * 64).decode()
+    req = f"""GET {path} HTTP/1.1\r
+Host: {host}\r
+Upgrade: websocket\r
+Connection: Upgrade\r
+Sec-WebSocket-Key: {big_key}\r
+Sec-WebSocket-Version: 13\r
+\r
+"""
+    response = send_raw_handshake(host, port, req)
+    return {
+        'name': 'Oversized Sec-WebSocket-Key',
+        'result': 'Vulnerable' if "101 Switching Protocols" in response else 'Secure',
+        'details': response
+    }
+
+def test_duplicate_sec_websocket_key(host, port, path="/"):
+    key = b64encode(b"1234567890123456").decode()
+    req = f"""GET {path} HTTP/1.1\r
+Host: {host}\r
+Upgrade: websocket\r
+Connection: Upgrade\r
+Sec-WebSocket-Key: {key}\r
+Sec-WebSocket-Key: {key}duplicate\r
+Sec-WebSocket-Version: 13\r
+\r
+"""
+    response = send_raw_handshake(host, port, req)
+    return {
+        'name': 'Duplicate Sec-WebSocket-Key',
+        'result': 'Vulnerable' if "101 Switching Protocols" in response else 'Secure',
+        'details': response
+    }
+
+def test_missing_sec_websocket_version(host, port, path="/"):
+    key = b64encode(b"1234567890123456").decode()
+    req = f"""GET {path} HTTP/1.1\r
+Host: {host}\r
+Upgrade: websocket\r
+Connection: Upgrade\r
+Sec-WebSocket-Key: {key}\r
+\r
+"""
+    response = send_raw_handshake(host, port, req)
+    return {
+        'name': 'Missing Sec-WebSocket-Version',
+        'result': 'Vulnerable' if "101 Switching Protocols" in response else 'Secure',
+        'details': response
+    }
+
+def test_invalid_sec_websocket_version(host, port, path="/"):
+    key = b64encode(b"1234567890123456").decode()
+    req = f"""GET {path} HTTP/1.1\r
+Host: {host}\r
+Upgrade: websocket\r
+Connection: Upgrade\r
+Sec-WebSocket-Key: {key}\r
+Sec-WebSocket-Version: 999\r
+\r
+"""
+    response = send_raw_handshake(host, port, req)
+    return {
+        'name': 'Invalid Sec-WebSocket-Version',
+        'result': 'Vulnerable' if "101 Switching Protocols" in response else 'Secure',
+        'details': response
+    }
+
+def test_conflicting_sec_websocket_version(host, port, path="/"):
+    key = b64encode(b"1234567890123456").decode()
+    req = f"""GET {path} HTTP/1.1\r
+Host: {host}\r
+Upgrade: websocket\r
+Connection: Upgrade\r
+Sec-WebSocket-Key: {key}\r
+Sec-WebSocket-Version: 13\r
+Sec-WebSocket-Version: 8\r
+\r
+"""
+    response = send_raw_handshake(host, port, req)
+    return {
+        'name': 'Conflicting Sec-WebSocket-Version',
+        'result': 'Vulnerable' if "101 Switching Protocols" in response else 'Secure',
+        'details': response
+    }
+
+import socket
+import ssl
+
+def send_custom_handshake(host, port, request):
+    """Send a custom handshake request and return response."""
+    with socket.create_connection((host, port), timeout=5) as sock:
+        sock.sendall(request.encode())
+        response = sock.recv(4096).decode()
+        return response
+
+def test_wrong_upgrade_header(host, port, path="/"):
+    request = (
+        f"GET {path} HTTP/1.1\r\n"
+        f"Host: {host}\r\n"
+        "Upgrade: websocketty\r\n"  # intentionally wrong
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Key: testtesttesttesttesttest==\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "\r\n"
+    )
+    response = send_custom_handshake(host, port, request)
+    if "101" in response:
+        return {
+            'name': 'Wrong Upgrade Header',
+            'risk': 'High',
+            'description': 'Server accepted handshake with wrong Upgrade header.',
+            'solution': 'Enforce strict Upgrade header validation.',
+            'affected_host': f"{host}:{port}"
+        }
+
+def test_missing_connection_header(host, port, path="/"):
+    request = (
+        f"GET {path} HTTP/1.1\r\n"
+        f"Host: {host}\r\n"
+        "Upgrade: websocket\r\n"
+        "Sec-WebSocket-Key: testtesttesttesttesttest==\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "\r\n"
+    )
+    response = send_custom_handshake(host, port, request)
+    if "101" in response:
+        return {
+            'name': 'Missing Connection Header',
+            'risk': 'High',
+            'description': 'Server accepted handshake without Connection header.',
+            'solution': 'Connection: Upgrade header is required for security.',
+            'affected_host': f"{host}:{port}"
+        }
+
+def test_case_sensitive_headers(host, port, path="/"):
+    request = (
+        f"GET {path} HTTP/1.1\r\n"
+        f"Host: {host}\r\n"
+        "uPgradE: websocket\r\n"  # intentionally mixed-case
+        "cOnneCtion: Upgrade\r\n"
+        "sEc-websocKet-key: testtesttesttesttesttest==\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "\r\n"
+    )
+    response = send_custom_handshake(host, port, request)
+    if "101" in response:
+        return {
+            'name': 'Case-Sensitive Headers',
+            'risk': 'Medium',
+            'description': 'Server did not validate header names as case-insensitive.',
+            'solution': 'Ensure case-insensitive header parsing as per RFC.',
+            'affected_host': f"{host}:{port}"
+        }
+
+def test_oversized_headers(host, port, path="/"):
+    big_value = "A" * 8000
+    request = (
+        f"GET {path} HTTP/1.1\r\n"
+        f"Host: {host}\r\n"
+        f"X-Big-Header: {big_value}\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Key: testtesttesttesttesttest==\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "\r\n"
+    )
+    response = send_custom_handshake(host, port, request)
+    if "101" in response:
+        return {
+            'name': 'Oversized Headers',
+            'risk': 'Medium',
+            'description': 'Server accepted handshake with oversized headers.',
+            'solution': 'Set limits for header size to prevent resource exhaustion.',
+            'affected_host': f"{host}:{port}"
+        }
+
+def test_missing_host_header(host, port, path="/"):
+    request = (
+        f"GET {path} HTTP/1.1\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Key: testtesttesttesttesttest==\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "\r\n"
+    )
+    response = send_custom_handshake(host, port, request)
+    if "101" in response:
+        return {
+            'name': 'Missing Host Header',
+            'risk': 'High',
+            'description': 'Server accepted handshake without Host header.',
+            'solution': 'Enforce Host header validation.',
+            'affected_host': f"{host}:{port}"
+        }
+
+def test_fake_host_header(host, port, path="/"):
+    request = (
+        f"GET {path} HTTP/1.1\r\n"
+        "Host: fake.example.com\r\n"  # intentionally fake
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Key: testtesttesttesttesttest==\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "\r\n"
+    )
+    response = send_custom_handshake(host, port, request)
+    if "101" in response:
+        return {
+            'name': 'Fake Host Header',
+            'risk': 'Medium',
+            'description': 'Server accepted handshake with incorrect Host header.',
+            'solution': 'Validate Host header to match expected server domain.',
+            'affected_host': f"{host}:{port}"
+        }
+
+def test_multiple_host_headers(host, port, path="/"):
+    request = (
+        f"GET {path} HTTP/1.1\r\n"
+        "Host: real.example.com\r\n"
+        "Host: fake.example.com\r\n"  # multiple Host headers
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        "Sec-WebSocket-Key: testtesttesttesttesttest==\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "\r\n"
+    )
+    response = send_custom_handshake(host, port, request)
+    if "101" in response:
+        return {
+            'name': 'Multiple Host Headers',
+            'risk': 'High',
+            'description': 'Server accepted handshake with multiple Host headers.',
+            'solution': 'Reject requests with duplicate Host headers.',
+            'affected_host': f"{host}:{port}"
+        }
+
+def perform_websocket_tests(websocket_urls, payloads):
+    vulnerabilities = []
 
     with ThreadPoolExecutor(max_workers=5) as executor:
+        # 1️⃣ Test Origin Check
         origin_results = executor.map(test_origin_check, websocket_urls)
         vulnerabilities.extend([v for v in origin_results if v])
+
+        # 2️⃣ Test Authentication
         auth_results = executor.map(test_authentication, websocket_urls)
         vulnerabilities.extend([v for v in auth_results if v])
 
+        # 3️⃣ Protocol Fuzzing
         fuzz_results = []
         for ws_url in websocket_urls:
             fuzz_results.extend(executor.map(lambda p: test_fuzzing(ws_url, p), payloads))
         vulnerabilities.extend([v for v in fuzz_results if v])
+
+        # 4️⃣ Handshake Tests
+        handshake_results = []
+        for ws_url in websocket_urls:
+            parsed_url = urlparse(ws_url)
+            host = parsed_url.hostname
+            port = parsed_url.port or (443 if parsed_url.scheme == "wss" else 80)
+            path = parsed_url.path or "/"
+
+            handshake_tests = [
+                test_omit_sec_websocket_key,
+                test_non_base64_sec_websocket_key,
+                test_oversized_sec_websocket_key,
+                test_duplicate_sec_websocket_key,
+                test_missing_sec_websocket_version,
+                test_invalid_sec_websocket_version,
+                test_conflicting_sec_websocket_version,
+                test_wrong_upgrade_header,
+                test_missing_connection_header,
+                test_case_sensitive_headers,
+                test_oversized_headers,
+                test_missing_host_header,
+                test_fake_host_header,
+                test_multiple_host_headers
+            ]
+
+            for test_func in handshake_tests:
+                result = test_func(host, port, path)
+                if result:
+                    vulnerabilities.append(result)
+
+        
 
     return vulnerabilities
