@@ -1,0 +1,32 @@
+==================================================
+WebSocket Security Scan Report
+==================================================
+
+Scan Summary
+--------------------------------------------------
+Scan Start Time: 2025-06-11 11:05:28
+Total Scan Duration: 43 seconds
+URLs Scanned: 1
+Total Vulnerabilities Found:
+  High: 0
+  Medium: 0
+  Low: 0
+
+Detailed Results
+--------------------------------------------------
+
+URL: http://192.168.56.1:8080/
+Number of URLs Crawled: 1
+Crawled URLs:
+  - http://192.168.56.1:8080/
+Number of WebSocket Endpoints: 2
+WebSocket Endpoints:
+  - ws://localhost:8081
+  - ws://localhost:8081/
+Vulnerabilities:
+  None
+Scan Duration: 43 seconds
+--------------------------------------------------
+
+End of Report
+==================================================

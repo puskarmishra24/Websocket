@@ -38,3 +38,90 @@ GET / HTTP/1.1
 Host: example.com
 Upgrade: websocket
 Connection: Upgrade
+
+# Unicode payload to test encoding issues (Vuln #19, #33)
+{"data": "🚀🌟💥"}
+
+# Oversized message for DoS (Vuln #58)
+{"message": "B" * 2000000}
+
+# Invalid opcode frame (Vuln #23) - Protocol Fuzzing
+\x83\x04test
+
+# Reserved opcode frame (Vuln #24) - Protocol Fuzzing
+\x8B\x04test
+
+# Zero-length fragment (Vuln #25) - Protocol Fuzzing
+\x01\x00
+
+# Invalid payload length (Vuln #26) - Protocol Fuzzing
+\x81\x0Atest
+
+# Negative payload length (Vuln #27) - Protocol Fuzzing
+\x81\xFFtest
+
+# Mismatched payload (Vuln #28) - Protocol Fuzzing
+\x81\x04testtest
+
+# Invalid masking key (Vuln #29) - Protocol Fuzzing
+\x81\x84\x00\x00\x00\x00test
+
+# Unmasked client frame (Vuln #30) - Protocol Fuzzing
+\x81\x04test
+
+# Invalid RSV bits (Vuln #31) - Protocol Fuzzing
+\xC1\x04test
+
+# Oversized control frame (Vuln #32) - Protocol Fuzzing
+\x89\x7E\x00\x7EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+# Non-UTF-8 text (Vuln #33) - Protocol Fuzzing
+\x81\x02\xFF\xFF
+
+# Null bytes in text (Vuln #34) - Protocol Fuzzing
+\x81\x05te\x00st
+
+# Binary as text (Vuln #35) - Protocol Fuzzing
+\x81\x04\x00\xFF\x00\xFF
+
+# Text as binary (Vuln #36) - Protocol Fuzzing
+\x82\x04text
+
+# Invalid close code (Vuln #37) - Protocol Fuzzing
+\x88\x04\x03\xE7OK
+
+# Long close reason (Vuln #40) - Protocol Fuzzing
+\x88\x7D\x03\xE8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+# Path traversal attempt (Vuln #74)
+{"path": "/../../etc/passwd"}
+
+# Query parameter flood (Vuln #75)
+{"query": "param=" + "X" * 1000}
+
+# PostMessage abuse attempt (Vuln #68)
+{"message": "window.postMessage('malicious','*')"}
+
+# Spoofed Origin header for origin check (Vuln #65)
+Origin: http://malicious.com
+
+# Missing Origin header for origin check (Vuln #65)
+Origin: 
+
+# Invalid Origin header for origin check (Vuln #65)
+Origin: null
+
+# Missing authentication cookie (Vuln #41)
+Cookie: 
+
+# Invalid authentication token (Vuln #43)
+Authorization: Bearer invalid-token
+
+# Expired authentication token (Vuln #42)
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MjAwMDAwMDB9.invalid-signature
+
+# Malformed WebSocket frame with invalid opcode sequence (Protocol Fuzzing)
+\xFF\x04test
+
+# Oversized WebSocket frame (Protocol Fuzzing)
+\x81\x7F\x00\x00\x00\x00\x00\x10\x00\x00{"data": "A" * 1048576}
