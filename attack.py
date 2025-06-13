@@ -1412,7 +1412,7 @@ def test_missing_cors_headers(ws_url):
         if missing:
             return {
                 'name': 'Missing CORS Headers',
-                'risk': 'Moderate',
+                'risk': 'Medium',
                 'description': f"Server at {http_url} lacks CORS headers: {', '.join(missing)}.",
                 'solution': 'Configure appropriate CORS headers.',
                 'affected_host': http_url,
@@ -1693,36 +1693,36 @@ def perform_websocket_tests(websocket_urls, payloads):
             fuzz_results.extend(executor.map(lambda p: test_fuzzing(ws_url, p), payloads))
         vulnerabilities.extend([v for v in fuzz_results if v])
 
-        # 4️⃣ Handshake & HTTP Request Tests (Vuln #1-22, excluding case-sensitive headers #10)
-        handshake_results = []
-        for ws_url in websocket_urls:
-             parsed_url = urlparse(ws_url)
-             host = parsed_url.hostname
-             port = parsed_url.port or (443 if parsed_url.scheme == 'wss' else 80)
-             path = parsed_url.path or "/"
+        # # 4️⃣ Handshake & HTTP Request Tests (Vuln #1-22, excluding case-sensitive headers #10)
+        # handshake_results = []
+        # for ws_url in websocket_urls:
+        #     parsed_url = urlparse(ws_url)
+        #     host = parsed_url.hostname
+        #     port = parsed_url.port or (443 if parsed_url.scheme == 'wss' else 80)
+        #     path = parsed_url.path or "/"
 
-             handshake_tests = [
-                 test_omit_sec_websocket_key,  # 1
-                 test_non_base64_sec_websocket_key,  # 2
-                 test_oversized_sec_websocket_key,  # 3
-                 test_duplicate_sec_websocket_key,  # 4
-                 test_missing_sec_websocket_version,  # 5
-                 test_invalid_sec_websocket_version,  # 6
-                 test_conflicting_sec_websocket_version,  # 7
-                 test_wrong_upgrade_header,  # 8
-                 test_missing_connection_header,  # 9
-                 test_case_sensitive_headers,  # 10
-                 test_non_get_method,  # 11
-                 test_fake_http_status,  # 12
-                 # test_wrong_sec_websocket_accept,  # 13 (Commented out because it's not defined)
-                 test_oversized_headers,  # 14
-                 test_missing_host_header,  # 15
-                 test_fake_host_header,  # 16
-                 test_multiple_host_headers,  # 17
-                 test_long_url_path,  # 18
-                 test_unicode_url,  # 19
-                 test_http_0_9_handshake,  # 20
-             ]
+        #     handshake_tests = [
+        #         test_omit_sec_websocket_key,  # 1
+        #         test_non_base64_sec_websocket_key,  # 2
+        #         test_oversized_sec_websocket_key,  # 3
+        #         test_duplicate_sec_websocket_key,  # 4
+        #         test_missing_sec_websocket_version,  # 5
+        #         test_invalid_sec_websocket_version,  # 6
+        #         test_conflicting_sec_websocket_version,  # 7
+        #         test_wrong_upgrade_header,  # 8
+        #         test_missing_connection_header,  # 9
+        #         test_case_sensitive_headers,  # 10
+        #         test_non_get_method,  # 11
+        #         test_fake_http_status,  # 12
+        #         # test_wrong_sec_websocket_accept,  # 13 (Commented out because it's not defined)
+        #         test_oversized_headers,  # 14
+        #         test_missing_host_header,  # 15
+        #         test_fake_host_header,  # 16
+        #         test_multiple_host_headers,  # 17
+        #         test_long_url_path,  # 18
+        #         test_unicode_url,  # 19
+        #         test_http_0_9_handshake,  # 20
+        #     ]
 
         #     for test_func in handshake_tests:
         #         result = test_func(host, port, path)
@@ -1854,7 +1854,7 @@ def perform_websocket_tests(websocket_urls, payloads):
 
         #     dos_tests = [
         #         test_no_compression_negotiation,  # 61
-        #         test_no_timeout_policy,  # 64
+        #         #test_no_timeout_policy,  # 64
         #     ]
 
         #     for test_func in dos_tests:

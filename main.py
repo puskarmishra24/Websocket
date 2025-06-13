@@ -5,6 +5,7 @@ from termcolor import colored
 import crawler
 import attack
 import report_generator
+import csv
 
 def print_aligned(label, value, label_width=25):
     """Print a label and value with aligned formatting."""
@@ -15,13 +16,43 @@ async def main():
     print(colored("Starting scan on " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "blue"))
     print(colored("=" * 40 + "\n", "blue"))
 
-    # Input URLs
-    urls_input = input(colored("Enter URLs to scan (comma-separated, e.g., https://example.com): ", "cyan")).strip()
-    if not urls_input:
-        print(colored("[-] No URLs provided. Exiting.", "red"))
-        return
-    target_urls = [url.strip() for url in urls_input.split(',')]
+    # # Input URLs
+    # urls_input = input(colored("Enter URLs to scan (comma-separated, e.g., https://example.com): ", "cyan")).strip()
+    # if not urls_input:
+    #     print(colored("[-] No URLs provided. Exiting.", "red"))
+    #     return
+    # target_urls = [url.strip() for url in urls_input.split(',')]
 
+    # Choose input method
+    input_method = input(colored("Choose input method (1: Manual, 2: CSV file): ", "cyan")).strip()
+    target_urls = []
+
+    if input_method == "1":
+        urls_input = input(colored("Enter the URLs you want to test (e.g., https://example.com), separated by commas: ", "cyan")).strip()
+        if urls_input:
+            target_urls = [url.strip() for url in urls_input.split(',')]
+        
+    elif input_method == "2":
+        csv_file = r"D:/GitHub/Websocket/websites.csv"
+        try:
+            with open(csv_file, newline='') as csvfile:
+                reader = csv.DictReader(csvfile)
+                if 'url' not in reader.fieldnames:
+                    print(colored("CSV file must contain a 'url' column.", "red"))
+                    return
+                target_urls = [row['url'].strip() for row in reader]
+        
+        except Exception as e:
+            print(colored(f"Error reading CSV file: {e}", "red"))
+            return
+    else:
+        print(colored("Invalid input method. Exiting.", "red"))
+        return
+
+    if not target_urls:
+        print(colored("No URLs provided. Exiting.", "red"))
+        return
+    
     combined_results = {
         'scan_start_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'total_scan_duration': 0,
@@ -91,17 +122,17 @@ async def main():
                 try:
                     vulnerabilities = attack.attack_website(target_url, websocket_urls, attack_type="websocket")
                     print(colored(f"[+] Attack complete: {len(vulnerabilities)} vulnerabilities found", "green"))
-                    if vulnerabilities:
-                        print(colored("\nVulnerabilities:", "cyan"))
-                        for i, vuln in enumerate(vulnerabilities, 1):
-                            print(colored(f"\nVulnerability {i}:", "white"))
-                            print_aligned("  Name:", vuln.get('name', 'Unknown'))
-                            print_aligned("  Risk Level:", vuln.get('risk', 'Unknown'))
-                            print_aligned("  Description:", vuln.get('description', ''))
-                            print_aligned("  Solution:", vuln.get('solution', ''))
-                            print_aligned("  Affected URL:", vuln.get('affected_url', vuln.get('affected_host', '')))
-                            print_aligned("  Impact:", vuln.get('impact', ''))
-                            print(colored("-" * 30, "white"))
+                    # if vulnerabilities:
+                    #     print(colored("\nVulnerabilities:", "cyan"))
+                    #     for i, vuln in enumerate(vulnerabilities, 1):
+                    #         print(colored(f"\nVulnerability {i}:", "white"))
+                    #         print_aligned("  Name:", vuln.get('name', 'Unknown'))
+                    #         print_aligned("  Risk Level:", vuln.get('risk', 'Unknown'))
+                    #         print_aligned("  Description:", vuln.get('description', ''))
+                    #         print_aligned("  Solution:", vuln.get('solution', ''))
+                    #         print_aligned("  Affected URL:", vuln.get('affected_url', vuln.get('affected_host', '')))
+                    #         print_aligned("  Impact:", vuln.get('impact', ''))
+                    #         print(colored("-" * 30, "white"))
                 except Exception as e:
                     print(colored(f"[-] Error during attack: {e}", "red"))
 
