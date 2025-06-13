@@ -102,6 +102,7 @@ async def main():
             manual_ws = input(colored("\n[?] No WebSocket endpoints found. Manually specify URLs? (yes/no): ", "yellow")).strip().lower()
             if manual_ws == "yes":
                 ws_input = input(colored("Enter WebSocket URLs (comma-separated, e.g., wss://example.com/ws): ", "cyan")).strip()
+                #ws_input = "ws://103.210.73.254/Academy/tokenview"
                 if ws_input:
                     websocket_urls = [ws_url.strip() for ws_url in ws_input.split(',')]
                     crawl_data['websocket_urls'] = websocket_urls
@@ -120,7 +121,7 @@ async def main():
             else:
                 print(colored("[*] Starting WebSocket attack...", "yellow"))
                 try:
-                    vulnerabilities = attack.attack_website(target_url, websocket_urls, attack_type="websocket")
+                    vulnerabilities = attack.attack_website(websocket_urls)
                     print(colored(f"[+] Attack complete: {len(vulnerabilities)} vulnerabilities found", "green"))
                     # if vulnerabilities:
                     #     print(colored("\nVulnerabilities:", "cyan"))

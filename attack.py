@@ -25,7 +25,7 @@ def load_payload(file_name):
     with open(file_path, "r", encoding='utf-8', errors='ignore') as file:
         return [line.strip() for line in file.readlines() if line.strip()]
 
-def attack_website(target_url, websocket_urls, attack_type="websocket"):
+def attack_website(websocket_urls):
     """Main function to handle WebSocket attack logic."""
     websocket_payloads = load_payload("websocket_payload.txt")
     print(colored("Starting WebSocket tests...", "yellow"))
@@ -1682,17 +1682,17 @@ def perform_websocket_tests(websocket_urls, payloads):
         # 1️⃣ Test Origin Check
         origin_results = executor.map(test_origin_check, websocket_urls)
         vulnerabilities.extend([v for v in origin_results if v])
-
+        print('here')
         # 2️⃣ Test Authentication
         auth_results = executor.map(test_authentication, websocket_urls)
         vulnerabilities.extend([v for v in auth_results if v])
-
+        print('heree')
         # 3️⃣ Protocol Fuzzing
         fuzz_results = []
         for ws_url in websocket_urls:
             fuzz_results.extend(executor.map(lambda p: test_fuzzing(ws_url, p), payloads))
         vulnerabilities.extend([v for v in fuzz_results if v])
-
+        print('hereee')
         # # 4️⃣ Handshake & HTTP Request Tests (Vuln #1-22, excluding case-sensitive headers #10)
         # handshake_results = []
         # for ws_url in websocket_urls:
