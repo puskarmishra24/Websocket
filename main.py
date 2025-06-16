@@ -139,7 +139,7 @@ async def main():
             risk = vuln.get('risk', 'Low')
             combined_results['total_vulnerabilities'][risk] += 1
 
-        #combined_results['urls_scanned'].append(target_url)
+        combined_results['urls_scanned'].append(target_url)
         combined_results['detailed_results'].append(url_result)
 
     combined_results['total_scan_duration'] = time.time() - start_scan_time
