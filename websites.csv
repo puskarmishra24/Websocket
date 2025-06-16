@@ -1,2 +1,12 @@
-url
-http://192.168.142.25:8080
+url,WebSocket URL,Protocol,Category,Notes
+http://192.168.142.25:8080,,,,
+https://www.pesuacademy.com,ws://103.210.73.254/Academy/tokenview,ws://,Education,Identified in your crawl; likely used for live notifications.
+https://www.slack.com,wss://slack.com/ws,wss://,Collaboration,Known for using WebSocket for real-time messaging.
+https://www.cryptocompare.com,wss://streamer.cryptocompare.com,wss://,Cryptocurrency,Used for streaming live cryptocurrency prices.
+http://example-chat.com,ws://example-chat.com/chat,ws://,Chat Application,Hypothetical example of a simple chat app using non-secure WebSocket.
+https://www.tradingview.com,wss://data.tradingview.com/socket.io,wss://,Stock Market,Known for real-time stock and trading data updates.
+https://www.twitch.tv,wss://irc-ws.chat.twitch.tv,wss://,Live Streaming,Uses WebSocket for live chat during streams.
+http://example-game.com,ws://example-game.com/game,ws://,Online Gaming,Hypothetical example of a multiplayer game using non-secure WebSocket.
+https://www.discord.com,wss://gateway.discord.gg,wss://,Communication,Uses WebSocket for real-time voice and text communication.
+https://www.binance.com,wss://stream.binance.com:9443/ws,wss://,Cryptocurrency,Provides live market data updates via WebSocket.
+https://www.figma.com,wss://ws.figma.com,wss://,Collaboration,Uses WebSocket for real-time collaborative design updates.

@@ -1,3 +1,5 @@
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 import asyncio
 from datetime import datetime
 import time
@@ -16,14 +18,7 @@ async def main():
     print(colored("Starting scan on " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "blue"))
     print(colored("=" * 40 + "\n", "blue"))
 
-    # # Input URLs
-    # urls_input = input(colored("Enter URLs to scan (comma-separated, e.g., https://example.com): ", "cyan")).strip()
-    # if not urls_input:
-    #     print(colored("[-] No URLs provided. Exiting.", "red"))
-    #     return
-    # target_urls = [url.strip() for url in urls_input.split(',')]
-
-    # Choose input method
+    #Choose input method
     input_method = input(colored("Choose input method (1: Manual, 2: CSV file): ", "cyan")).strip()
     target_urls = []
 
@@ -33,7 +28,7 @@ async def main():
             target_urls = [url.strip() for url in urls_input.split(',')]
         
     elif input_method == "2":
-        csv_file = r"D:/GitHub/Websocket/websites.csv"
+        csv_file = r"C:\Users\puska\OneDrive\Documents\Github\Websocket\websites.csv"
         try:
             with open(csv_file, newline='') as csvfile:
                 reader = csv.DictReader(csvfile)
@@ -111,31 +106,20 @@ async def main():
                     print(colored("\nManually Specified WebSocket URLs:", "cyan"))
                     for i, ws_url in enumerate(websocket_urls, 1):
                         print(colored(f"  {i}. {ws_url}", "white"))
-
-        # Attack phase
-        perform_attack = input(colored("\n[?] Perform WebSocket attack? (yes/no): ", "yellow")).strip().lower()
-        vulnerabilities = []
-        if perform_attack == "yes":
-            if not websocket_urls:
-                print(colored("[-] No WebSocket endpoints to attack.", "red"))
-            else:
-                print(colored("[*] Starting WebSocket attack...", "yellow"))
-                try:
-                    vulnerabilities = attack.attack_website(websocket_urls)
-                    print(colored(f"[+] Attack complete: {len(vulnerabilities)} vulnerabilities found", "green"))
-                    # if vulnerabilities:
-                    #     print(colored("\nVulnerabilities:", "cyan"))
-                    #     for i, vuln in enumerate(vulnerabilities, 1):
-                    #         print(colored(f"\nVulnerability {i}:", "white"))
-                    #         print_aligned("  Name:", vuln.get('name', 'Unknown'))
-                    #         print_aligned("  Risk Level:", vuln.get('risk', 'Unknown'))
-                    #         print_aligned("  Description:", vuln.get('description', ''))
-                    #         print_aligned("  Solution:", vuln.get('solution', ''))
-                    #         print_aligned("  Affected URL:", vuln.get('affected_url', vuln.get('affected_host', '')))
-                    #         print_aligned("  Impact:", vuln.get('impact', ''))
-                    #         print(colored("-" * 30, "white"))
-                except Exception as e:
-                    print(colored(f"[-] Error during attack: {e}", "red"))
+    # Attack phase
+    perform_attack = input(colored("\n[?] Perform WebSocket attack? (yes/no): ", "yellow")).strip().lower()
+    vulnerabilities = []
+    if perform_attack == "yes":
+        if not websocket_urls:
+            print(colored("[-] No WebSocket endpoints to attack.", "red"))
+        else:
+            print(colored("[*] Starting WebSocket attack...", "yellow"))
+            try:
+                vulnerabilities = attack.attack_website(websocket_urls)
+                print(colored(f"[+] Attack complete: {len(vulnerabilities)} vulnerabilities found", "green"))
+                
+            except Exception as e:
+                print(colored(f"[-] Error during attack: {e}", "red"))
 
         # Compile results
         scan_duration = time.time() - start_time
@@ -155,7 +139,7 @@ async def main():
             risk = vuln.get('risk', 'Low')
             combined_results['total_vulnerabilities'][risk] += 1
 
-        combined_results['urls_scanned'].append(target_url)
+        #combined_results['urls_scanned'].append(target_url)
         combined_results['detailed_results'].append(url_result)
 
     combined_results['total_scan_duration'] = time.time() - start_scan_time
