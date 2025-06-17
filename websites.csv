@@ -10,3 +10,25 @@ http://example-game.com,ws://example-game.com/game,ws://,Online Gaming,Hypotheti
 https://www.discord.com,wss://gateway.discord.gg,wss://,Communication,Uses WebSocket for real-time voice and text communication.
 https://www.binance.com,wss://stream.binance.com:9443/ws,wss://,Cryptocurrency,Provides live market data updates via WebSocket.
 https://www.figma.com,wss://ws.figma.com,wss://,Collaboration,Uses WebSocket for real-time collaborative design updates.
+
+
+https://websocket.org,wss://echo.websocket.org,wss,Testing,Echo test server :contentReference[oaicite:1]{index=1}
+https://kaazing.com,wss://demos.kaazing.com/echo,wss,Testing,Echo demo :contentReference[oaicite:2]{index=2}
+https://kaazing.com,ws://demos.kaazing.com/amqp,ws,Messaging,AMQP over WS :contentReference[oaicite:3]{index=3}
+https://ifelse.io,wss://ws.ifelse.io,wss,Testing,Alternate echo server :contentReference[oaicite:4]{index=4}
+https://websockets.chilkat.io,wss://websockets.chilkat.io,ws,Testing,Live Chilkat echo server :contentReference[oaicite:5]{index=5}
+https://postman.com,wss://ws.postman-echo.com/raw,wss,Testing,Raw echo server :contentReference[oaicite:6]{index=6}
+https://postman.com,wss://ws.postman-echo.com/socketio,wss,Testing,Socket.IO echo :contentReference[oaicite:7]{index=7}
+https://nownodes.io,wss://public-eth.nownodes.io/ws,wss,Blockchain,Eth public RPC
+https://nownodes.io,wss://public-btc.nownodes.io/ws,wss,Blockchain,BTC public RPC
+https://publicnode.com,wss://rpc.publicnode.com/ws,wss,Blockchain,Multi‑chain RPC
+https://ankr.com,wss://rpc.ankr.com/ws,wss,Blockchain,Ankr public RPC
+https://coinsdo.com,wss://ws.coinsdo.com/ws,wss,Blockchain,Multi‑chain RPC
+http://ws.vi-server.org,ws://ws.vi-server.org/mirror,ws,Testing,Mirror echo server :contentReference[oaicite:8]{index=8}
+http://websocket-echo-intustack.koyeb.app,ws://websocket-echo-intustack.koyeb.app,ws,Testing,Custom echo endpoint :contentReference[oaicite:9]{index=9}
+https://echo-websocket.fly.dev,wss://echo-websocket.fly.dev/.ws,wss,Testing,Community echo server :contentReference[oaicite:10]{index=10}
+https://github.com/websockets/websocket-echo-server,ws://demo.websocket-echo-server/ws,ws,Testing,Demo echo server :contentReference[oaicite:11]{index=11}
+https://github.com/fdeantoni/echo-server,ws://echo-server/ws,ws,Testing,Project echo endpoint :contentReference[oaicite:12]{index=12}
+https://github.com/kuznetsss/hyper_echo,ws://hyper-echo/ws,ws,Testing,Rust echo server :contentReference[oaicite:13]{index=13}
+https://echo.websocket.org,ws://echo.websocket.org,ws,Testing,HTTP echo endpoint :contentReference[oaicite:14]{index=14}
+https://socketsbay.com,wss://socketsbay.com/wss/v2/1/demo/,wss,Testing,Demo chat server

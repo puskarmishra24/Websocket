@@ -198,7 +198,7 @@ Sec-WebSocket-Version: 13\r\n
             response = conn.getresponse().read().decode()
             return {
                 'name': 'Non-Base64 Sec-WebSocket-Key',
-                'risk': 'High',
+                'risk': 'Medium',
                 'description': f"Server at {host}:{port} accepted non-base64 Sec-WebSocket-Key.",
                 'solution': 'Validate Sec-WebSocket-Key as base64-encoded.',
                 'affected_host': f"{host}:{port}",
@@ -211,7 +211,7 @@ Sec-WebSocket-Version: 13\r\n
         response = send_raw_handshake(host, port, req)
         return {
             'name': 'Non-Base64 Sec-WebSocket-Key',
-            'risk': 'High',
+            'risk': 'Medium',
             'description': f"Server at {host}:{port} accepted non-base64 Sec-WebSocket-Key.",
             'solution': 'Validate Sec-WebSocket-Key as base64-encoded.',
             'affected_host': f"{host}:{port}",
@@ -286,7 +286,7 @@ Sec-WebSocket-Version: 13\r\n
             response = conn.getresponse().read().decode()
             return {
                 'name': 'Duplicate Sec-WebSocket-Key',
-                'risk': 'High',
+                'risk': 'Medium',
                 'description': f"Server at {host}:{port} accepted duplicate Sec-WebSocket-Key headers.",
                 'solution': 'Reject requests with multiple Sec-WebSocket-Key headers.',
                 'affected_host': f"{host}:{port}",
@@ -299,7 +299,7 @@ Sec-WebSocket-Version: 13\r\n
         response = send_raw_handshake(host, port, req)
         return {
             'name': 'Duplicate Sec-WebSocket-Key',
-            'risk': 'High',
+            'risk': 'Medium',
             'description': f"Server at {host}:{port} accepted duplicate Sec-WebSocket-Key headers.",
             'solution': 'Reject requests with multiple Sec-WebSocket-Key headers.',
             'affected_host': f"{host}:{port}",
@@ -537,7 +537,7 @@ Sec-WebSocket-Version: 13\r\n
             response = conn.getresponse().read().decode()
             return {
                 'name': 'Case-Sensitive Headers',
-                'risk': 'Medium',
+                'risk': 'Low',
                 'description': f"Server at {host}:{port} accepted case-sensitive headers.",
                 'solution': 'Ensure case-insensitive header parsing as per RFC.',
                 'affected_host': f"{host}:{port}",
@@ -550,7 +550,7 @@ Sec-WebSocket-Version: 13\r\n
         response = send_raw_handshake(host, port, req)
         return {
             'name': 'Case-Sensitive Headers',
-            'risk': 'Medium',
+            'risk': 'Low',
             'description': f"Server at {host}:{port} accepted case-sensitive headers.",
             'solution': 'Ensure case-insensitive header parsing as per RFC.',
             'affected_host': f"{host}:{port}",
@@ -621,7 +621,7 @@ Sec-WebSocket-Version: 13\r\n
             response = conn.getresponse().read().decode()
             return {
                 'name': 'Fake HTTP Status',
-                'risk': 'Medium',
+                'risk': 'High',
                 'description': f"Server at {host}:{port} returned unexpected HTTP status.",
                 'solution': 'Ensure server returns 101 Switching Protocols for valid handshakes.',
                 'affected_host': f"{host}:{port}",
@@ -634,7 +634,7 @@ Sec-WebSocket-Version: 13\r\n
         response = send_raw_handshake(host, port, req)
         return {
             'name': 'Fake HTTP Status',
-            'risk': 'Medium',
+            'risk': 'High',
             'description': f"Server at {host}:{port} returned unexpected HTTP status.",
             'solution': 'Ensure server returns 101 Switching Protocols for valid handshakes.',
             'affected_host': f"{host}:{port}",
@@ -748,7 +748,7 @@ Sec-WebSocket-Version: 13\r\n
             response = conn.getresponse().read().decode()
             return {
                 'name': 'Fake Host Header',
-                'risk': 'Medium',
+                'risk': 'High',
                 'description': f"Server at {host}:{port} accepted handshake with incorrect Host header.",
                 'solution': 'Validate Host header to match expected server domain.',
                 'affected_host': f"{host}:{port}",
@@ -761,7 +761,7 @@ Sec-WebSocket-Version: 13\r\n
         response = send_raw_handshake(host, port, req)
         return {
             'name': 'Fake Host Header',
-            'risk': 'Medium',
+            'risk': 'High',
             'description': f"Server at {host}:{port} accepted handshake with incorrect Host header.",
             'solution': 'Validate Host header to match expected server domain.',
             'affected_host': f"{host}:{port}",
@@ -836,7 +836,7 @@ Sec-WebSocket-Version: 13\r\n
             response = conn.getresponse().read().decode()
             return {
                 'name': 'Long URL Path',
-                'risk': 'Medium',
+                'risk': 'Low',
                 'description': f"Server at {host}:{port} accepted handshake with long URL path (2KB).",
                 'solution': 'Limit URL path length to prevent resource exhaustion.',
                 'affected_host': f"{host}:{port}",
@@ -849,7 +849,7 @@ Sec-WebSocket-Version: 13\r\n
         response = send_raw_handshake(host, port, req)
         return {
             'name': 'Long URL Path',
-            'risk': 'Medium',
+            'risk': 'Low',
             'description': f"Server at {host}:{port} accepted handshake with long URL path (2KB).",
             'solution': 'Limit URL path length to prevent resource exhaustion.',
             'affected_host': f"{host}:{port}",
@@ -967,16 +967,14 @@ def test_non_ws_scheme(ws_url):
     """Test if WebSocket accepts non-WebSocket schemes (Vuln #22)."""
     try:
         parsed_url = urlparse(ws_url)
-        invalid_scheme_url = f"http://{parsed_url.hostname}{parsed_url.path}"
-        parsed_invalid_url = urlparse(invalid_scheme_url)
         # Check if the scheme is invalid (not ws:// or wss://)
-        if parsed_invalid_url.scheme not in ['ws', 'wss']:
+        if parsed_url.scheme not in ['ws', 'wss']:
             return {
                 'name': 'Non-WebSocket Scheme',
-                'risk': 'Medium',
+                'risk': 'High',
                 'description': f"WebSocket URL {ws_url} could be accessed with a non-WebSocket scheme 'http', which should be rejected by the server.",
                 'solution': 'Reject connections with non-WebSocket schemes (only allow ws:// or wss://).',
-                'affected_url': invalid_scheme_url,
+                'affected_url': ws_url,
                 'impact': 'Non-WebSocket schemes can lead to protocol misuse if not handled properly.'
             }
         # If the scheme is valid, this test isn't applicable
@@ -987,16 +985,19 @@ def test_non_ws_scheme(ws_url):
 
 def test_undefined_opcode(ws_url):
     """Test undefined opcode (Vuln #23)."""
-    frame = struct.pack("!B", 0x83) + struct.pack("!B", 0x04) + b"test"  # FIN=1, Opcode=0x3, Length=4
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Undefined Opcode',
-        'risk': 'Medium',
-        'description': f"WebSocket at {ws_url} accepted frame with undefined opcode 0x3.",
-        'solution': 'Reject frames with undefined opcodes.',
-        'affected_url': ws_url,
-        'impact': 'Undefined opcodes can cause unexpected server behavior.'
-    } if response else None
+    try:
+        frame = struct.pack("!B", 0x83) + struct.pack("!B", 0x04) + b"test"  # FIN=1, Opcode=0x3, Length=4
+        response = send_custom_frame(ws_url, frame)
+        return {
+            'name': 'Undefined Opcode',
+            'risk': 'High',
+            'description': f"WebSocket at {ws_url} accepted frame with undefined opcode 0x3.",
+            'solution': 'Reject frames with undefined opcodes.',
+            'affected_url': ws_url,
+            'impact': 'Undefined opcodes can cause unexpected server behavior.'
+        } if response else None
+    except:
+        return None
 
 def test_reserved_opcode(ws_url):
     """Test reserved opcode (Vuln #24)."""
@@ -1004,7 +1005,7 @@ def test_reserved_opcode(ws_url):
     response = send_custom_frame(ws_url, frame)
     return {
         'name': 'Reserved Opcode',
-        'risk': 'Medium',
+        'risk': 'High',
         'description': f"WebSocket at {ws_url} accepted frame with reserved opcode 0xB.",
         'solution': 'Reject frames with reserved opcodes (0x3-0x7, 0xB-0xF).',
         'affected_url': ws_url,
@@ -1024,7 +1025,7 @@ def test_zero_length_fragment(ws_url):
         ws.close()
         return {
             'name': 'Zero-Length Fragment',
-            'risk': 'Medium',
+            'risk': 'Low',
             'description': f"WebSocket at {ws_url} accepted zero-length fragment.",
             'solution': 'Reject zero-length fragments to prevent parsing issues.',
             'affected_url': ws_url,
@@ -1066,7 +1067,7 @@ def test_mismatched_payload(ws_url):
     response = send_custom_frame(ws_url, frame)
     return {
         'name': 'Mismatched Payload',
-        'risk': 'High',
+        'risk': 'Medium',
         'description': f"WebSocket at {ws_url} accepted frame with mismatched payload length.",
         'solution': 'Ensure payload length matches actual data received.',
         'affected_url': ws_url,
@@ -1082,7 +1083,7 @@ def test_invalid_masking_key(ws_url):
     response = send_custom_frame(ws_url, frame)
     return {
         'name': 'Invalid Masking Key',
-        'risk': 'Medium',
+        'risk': 'High',
         'description': f"WebSocket at {ws_url} accepted frame with invalid masking key.",
         'solution': 'Validate masking key application for client frames.',
         'affected_url': ws_url,
@@ -1122,7 +1123,7 @@ def test_oversized_control_frame(ws_url):
     response = send_custom_frame(ws_url, frame)
     return {
         'name': 'Oversized Control Frame',
-        'risk': 'High',
+        'risk': 'Medium',
         'description': f"WebSocket at {ws_url} accepted oversized control frame (126 bytes).",
         'solution': 'Enforce 125-byte limit for control frames per RFC 6455.',
         'affected_url': ws_url,
@@ -1135,7 +1136,7 @@ def test_non_utf8_text(ws_url):
     response = send_custom_frame(ws_url, frame)
     return {
         'name': 'Non-UTF-8 Text',
-        'risk': 'Medium',
+        'risk': 'High',
         'description': f"WebSocket at {ws_url} accepted non-UTF-8 Hztext frame.",
         'solution': 'Validate text frames for UTF-8 encoding.',
         'affected_url': ws_url,
@@ -1161,7 +1162,7 @@ def test_binary_as_text(ws_url):
     response = send_custom_frame(ws_url, frame)
     return {
         'name': 'Binary as Text',
-        'risk': 'Medium',
+        'risk': 'Low',
         'description': f"WebSocket at {ws_url} accepted binary data in text frame.",
         'solution': 'Validate text frames for valid UTF-8 content.',
         'affected_url': ws_url,
@@ -1205,7 +1206,7 @@ def test_early_close_frame(ws_url):
         ws.close()
         return {
             'name': 'Early Close Frame',
-            'risk': 'Medium',
+            'risk': 'Low',
             'description': f"WebSocket at {ws_url} accepted early close frame.",
             'solution': 'Handle early close frames gracefully.',
             'affected_url': ws_url,
@@ -1229,7 +1230,7 @@ def test_no_close_frame(ws_url):
         ws.close()
         return {
             'name': 'No Close Frame',
-            'risk': 'Medium',
+            'risk': 'Low',
             'description': f"WebSocket at {ws_url} handled abrupt closure without issues.",
             'solution': 'Ensure server handles abrupt closures gracefully.',
             'affected_url': ws_url,
@@ -1283,7 +1284,7 @@ def test_expired_cookie(ws_url):
         ws.close()
         return {
             'name': 'Expired Cookie',
-            'risk': 'High',
+            'risk': 'Medium',
             'description': f"WebSocket at {ws_url} accepts connections with an expired session cookie.",
             'solution': 'Validate cookie expiration on the server side.',
             'affected_url': ws_url,
@@ -1331,7 +1332,7 @@ def test_http_session_reuse(ws_url):
         ws.close()
         return {
             'name': 'HTTP Session Reuse',
-            'risk': 'Medium',
+            'risk': 'High',
             'description': f"WebSocket at {ws_url} reuses HTTP session cookie without revalidation.",
             'solution': 'Revalidate session cookies for WebSocket connections.',
             'affected_url': ws_url,
@@ -1471,7 +1472,7 @@ Sec-WebSocket-Version: 13\r\n
             response = conn.getresponse().read().decode()
             return {
                 'name': 'Fake Extension',
-                'risk': 'Medium',
+                'risk': 'High',
                 'description': f"Server at {host}:{port} accepted fake extension 'fake-extension'.",
                 'solution': 'Validate Sec-WebSocket-Extensions against supported extensions.',
                 'affected_host': f"{host}:{port}",
@@ -1484,7 +1485,7 @@ Sec-WebSocket-Version: 13\r\n
         response = send_raw_handshake(host, port, req)
         return {
             'name': 'Fake Extension',
-            'risk': 'Medium',
+            'risk': 'High',
             'description': f"Server at {host}:{port} accepted fake extension 'fake-extension'.",
             'solution': 'Validate Sec-WebSocket-Extensions against supported extensions.',
             'affected_host': f"{host}:{port}",
@@ -1818,7 +1819,7 @@ def test_idle_timeout_abuse(ws_url):
         ws.close()
         return {
             'name': 'Idle Timeout Abuse',
-            'risk': 'Medium',
+            'risk': 'High',
             'description': f"WebSocket at {ws_url} allows idle connections to persist for 60 seconds.",
             'solution': 'Implement an idle timeout policy to close inactive connections.',
             'affected_url': ws_url,
@@ -1903,7 +1904,7 @@ def test_no_timeout_policy(ws_url):
         ws.close()
         return {
             'name': 'No Timeout Policy',
-            'risk': 'Medium',
+            'risk': 'High',
             'description': f"WebSocket at {ws_url} lacks a connection timeout policy (active for 120 seconds).",
             'solution': 'Implement a connection timeout policy to close long-lived connections.',
             'affected_url': ws_url,
@@ -1930,7 +1931,7 @@ def test_missing_cors_headers(ws_url):
         if "Access-Control-Allow-Origin" not in response.headers:
             return {
                 'name': 'Missing CORS Headers',
-                'risk': 'Medium',
+                'risk': 'High',
                 'description': f"WebSocket endpoint {ws_url} (HTTP equivalent) lacks CORS headers.",
                 'solution': 'Implement proper CORS headers to restrict cross-origin access.',
                 'affected_url': http_url,
@@ -1950,7 +1951,7 @@ def test_cross_origin_iframe(ws_url):
         if "X-Frame-Options" not in response.headers or response.headers["X-Frame-Options"].lower() not in ["deny", "sameorigin"]:
             return {
                 'name': 'Cross-Origin Iframe',
-                'risk': 'Medium',
+                'risk': 'High',
                 'description': f"WebSocket endpoint {ws_url} (HTTP equivalent) allows cross-origin iframe access.",
                 'solution': 'Set X-Frame-Options header to DENY or SAMEORIGIN.',
                 'affected_url': http_url,
@@ -2016,7 +2017,7 @@ def test_spoofed_url(ws_url):
         if response.status_code == 200 and "malicious.com" in response.text.lower():
             return {
                 'name': 'Spoofed URL',
-                'risk': 'Medium',
+                'risk': 'High',
                 'description': f"WebSocket endpoint {ws_url} (HTTP equivalent) reflects spoofed Referer URL.",
                 'solution': 'Sanitize and validate Referer headers; avoid reflecting untrusted input.',
                 'affected_url': http_url,
@@ -2040,7 +2041,7 @@ def test_error_message_leak(ws_url):
         if any(keyword in response.lower() for keyword in ["stack trace", "exception", "sql", "database", "error at"]):
             return {
                 'name': 'Error Message Leak',
-                'risk': 'High',
+                'risk': 'Medium',
                 'description': f"WebSocket at {ws_url} leaks sensitive error messages: {response}.",
                 'solution': 'Avoid exposing detailed error messages in production; use generic error responses.',
                 'affected_url': ws_url,
@@ -2153,7 +2154,7 @@ def test_query_parameter_flood(ws_url):
         if response.status_code == 200:
             return {
                 'name': 'Query Parameter Flood',
-                'risk': 'Medium',
+                'risk': 'High',
                 'description': f"WebSocket endpoint {ws_url} (HTTP equivalent) handles query parameter flooding (1000 params).",
                 'solution': 'Limit the number of query parameters and validate input to prevent flooding.',
                 'affected_url': flood_url,
@@ -2169,19 +2170,19 @@ def perform_websocket_tests(websocket_urls, payloads):
     vulnerabilities = []
     with ThreadPoolExecutor(max_workers=5) as executor:
         print("Starting primary checks: Origin Check, Authentication, Protocol Fuzzing")
-        # # 1️⃣ Test Origin Check
-        # origin_results = executor.map(test_origin_check, websocket_urls)
-        # vulnerabilities.extend([v for v in origin_results if v])
+        # 1️⃣ Test Origin Check
+        origin_results = executor.map(test_origin_check, websocket_urls)
+        vulnerabilities.extend([v for v in origin_results if v])
         
-        # # 2️⃣ Test Authentication
-        # auth_results = executor.map(test_authentication, websocket_urls)
-        # vulnerabilities.extend([v for v in auth_results if v])
+        # 2️⃣ Test Authentication
+        auth_results = executor.map(test_authentication, websocket_urls)
+        vulnerabilities.extend([v for v in auth_results if v])
         
-        # # 3️⃣ Protocol Fuzzing
-        # fuzz_results = []
-        # for ws_url in websocket_urls:
-        #     fuzz_results.extend(executor.map(lambda p: test_fuzzing(ws_url, p), payloads))
-        # vulnerabilities.extend([v for v in fuzz_results if v])
+        # 3️⃣ Protocol Fuzzing
+        fuzz_results = []
+        for ws_url in websocket_urls:
+            fuzz_results.extend(executor.map(lambda p: test_fuzzing(ws_url, p), payloads))
+        vulnerabilities.extend([v for v in fuzz_results if v])
 
     # 4️⃣ Handshake & HTTP Request Tests (Vuln #1-22)
     print("Starting Handshake & HTTP Request Tests")
@@ -2226,7 +2227,10 @@ def perform_websocket_tests(websocket_urls, payloads):
             test_unicode_url,  # 19
             test_http_0_9_handshake,  # 20
         ]
+        i=1
         for test_func in handshake_tests:
+            print(i)
+            i+=1
             result = test_func(host, port, path)
             if result:
                 vulnerabilities.append(result)
@@ -2237,6 +2241,8 @@ def perform_websocket_tests(websocket_urls, payloads):
             test_non_ws_scheme,  # 22
         ]
         for test_func in ws_handshake_tests:
+            print(i)
+            i+=1
             result = test_func(ws_url)
             if result:
                 vulnerabilities.append(result)
@@ -2267,6 +2273,8 @@ def perform_websocket_tests(websocket_urls, payloads):
         ]
     #it works but get rid of yellow error msg
         for test_func in payload_tests:
+            print(i)
+            i+=1
             result = test_func(ws_url)
             if result:
                 vulnerabilities.append(result)
@@ -2284,6 +2292,8 @@ def perform_websocket_tests(websocket_urls, payloads):
         ]
 
         for test_func in auth_session_tests:
+            print(i)
+            i+=1
             result = test_func(ws_url)
             if result:
                 vulnerabilities.append(result)
@@ -2302,6 +2312,8 @@ def perform_websocket_tests(websocket_urls, payloads):
         ]
 
         for test_func in subprotocol_tests:
+            print(i)
+            i+=1
             result = test_func(host, port, path)
             if result:
                 vulnerabilities.append(result)
@@ -2314,6 +2326,8 @@ def perform_websocket_tests(websocket_urls, payloads):
     #it works ig but get rid of yellow error msg
 
         for test_func in ws_subprotocol_tests:
+            print(i)
+            i+=1
             result = test_func(ws_url)
             if result:
                 vulnerabilities.append(result)
@@ -2332,6 +2346,8 @@ def perform_websocket_tests(websocket_urls, payloads):
             test_http_1_0_downgrade,  # 53
         ]
         for test_func in security_tests:
+            print(i)
+            i+=1
             result = test_func(host, port, path)
             if result:
                 vulnerabilities.append(result)
@@ -2342,6 +2358,8 @@ def perform_websocket_tests(websocket_urls, payloads):
             test_certificate_mismatch,  # 56
         ]
         for test_func in ws_security_tests:
+            print(i)
+            i+=1
             result = test_func(ws_url)
             if result:
                 vulnerabilities.append(result)
@@ -2367,6 +2385,8 @@ def perform_websocket_tests(websocket_urls, payloads):
         ]
         
         for test_func in ws_dos_tests:
+            print(i)
+            i+=1
             result = test_func(ws_url)
             if result:
                 vulnerabilities.append(result)
@@ -2384,6 +2404,8 @@ def perform_websocket_tests(websocket_urls, payloads):
         ]
 
         for test_func in cross_origin_tests:
+            print(i)
+            i+=1
             result = test_func(ws_url)
             if result:
                 vulnerabilities.append(result)
@@ -2407,6 +2429,8 @@ def perform_websocket_tests(websocket_urls, payloads):
             test_query_parameter_flood,  # 75
         ]
         for test_func in ws_other_tests:
+            print(i)
+            i+=1
             result = test_func(ws_url)
             if result:
                 vulnerabilities.append(result)
