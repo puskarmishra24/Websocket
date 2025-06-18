@@ -1,6 +1,4 @@
-url,WebSocket URL,Protocol,Category,Notes
-http://192.168.142.25:8080,,,,
-https://www.pesuacademy.com,ws://103.210.73.254/Academy/tokenview,ws://,Education,Identified in your crawl; likely used for live notifications.
+Website_URL,WebSocket_URL,Protocol,Category,Notes
 https://www.slack.com,wss://slack.com/ws,wss://,Collaboration,Known for using WebSocket for real-time messaging.
 https://www.cryptocompare.com,wss://streamer.cryptocompare.com,wss://,Cryptocurrency,Used for streaming live cryptocurrency prices.
 http://example-chat.com,ws://example-chat.com/chat,ws://,Chat Application,Hypothetical example of a simple chat app using non-secure WebSocket.

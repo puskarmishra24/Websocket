@@ -18,9 +18,12 @@ async def main():
     print(colored("Starting scan on " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"), "blue"))
     print(colored("=" * 40 + "\n", "blue"))
 
+    start_scan_time = time.time()
+
     #Choose input method
     input_method = input(colored("Choose input method (1: Manual, 2: CSV file): ", "cyan")).strip()
     target_urls = []
+    safety_sockets = []
 
     if input_method == "1":
         urls_input = input(colored("Enter the URLs you want to test (e.g., https://example.com), separated by commas: ", "cyan")).strip()
@@ -28,15 +31,15 @@ async def main():
             target_urls = [url.strip() for url in urls_input.split(',')]
         
     elif input_method == "2":
-        csv_file = r"C:\Users\puska\OneDrive\Documents\Github\Websocket\websites.csv"
+        #csv_file = r"C:\Users\puska\OneDrive\Documents\Github\Websocket\websites.csv"
+        csv_file = r"D:\GitHub\Websocket\websites.csv"
         try:
             with open(csv_file, newline='') as csvfile:
                 reader = csv.DictReader(csvfile)
-                if 'url' not in reader.fieldnames:
-                    print(colored("CSV file must contain a 'url' column.", "red"))
-                    return
-                target_urls = [row['url'].strip() for row in reader]
-        
+                d1 = [row for row in reader]
+                target_urls = [row['Website_URL'].strip() for row in d1]
+                safety_sockets = [row['WebSocket_URL'].strip() for row in d1]
+            
         except Exception as e:
             print(colored(f"Error reading CSV file: {e}", "red"))
             return
@@ -55,8 +58,6 @@ async def main():
         'total_vulnerabilities': {'High': 0, 'Medium': 0, 'Low': 0},
         'detailed_results': []
     }
-
-    start_scan_time = time.time()
 
     for idx, target_url in enumerate(target_urls, 1):
         if not target_url.startswith(('http://', 'https://')):
@@ -80,7 +81,13 @@ async def main():
                 for i, ws_url in enumerate(crawl_data['websocket_urls'], 1):
                     print(colored(f"  {i}. {ws_url}", "white"))
             else:
-                print(colored("  None found.", "yellow"))
+                if input_method == 1:
+                    print(colored("  None found.", "yellow"))
+                else:
+                    x = safety_sockets[target_urls.index(target_url)]
+                    print("No WebSocket endpoints found. Using RFC6455 documented WebSocket: ",x)
+                    print()
+                    crawl_data['websocket_urls'].append(x)
         except Exception as e:
             print(colored(f"[-] Error crawling {target_url}: {e}", "red"))
             crawl_data = {
@@ -93,11 +100,10 @@ async def main():
 
         # Manual WebSocket input
         websocket_urls = crawl_data['websocket_urls']
-        if not websocket_urls:
+        if not websocket_urls and input_method == 1:
             manual_ws = input(colored("\n[?] No WebSocket endpoints found. Manually specify URLs? (yes/no): ", "yellow")).strip().lower()
             if manual_ws == "yes":
                 ws_input = input(colored("Enter WebSocket URLs (comma-separated, e.g., wss://example.com/ws): ", "cyan")).strip()
-                #ws_input = "ws://103.210.73.254/Academy/tokenview"
                 if ws_input:
                     websocket_urls = [ws_url.strip() for ws_url in ws_input.split(',')]
                     crawl_data['websocket_urls'] = websocket_urls
@@ -115,7 +121,9 @@ async def main():
         else:
             print(colored("[*] Starting WebSocket attack...", "yellow"))
             try:
-                vulnerabilities = attack.attack_website(websocket_urls)
+                #vulnerabilities = attack.attack_website(websocket_urls)
+                print(websocket_urls)
+                vulnerabilities = []
                 print(colored(f"[+] Attack complete: {len(vulnerabilities)} vulnerabilities found", "green"))
                 
             except Exception as e:
