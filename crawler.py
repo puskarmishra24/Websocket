@@ -15,7 +15,9 @@ except ImportError:
     print(colored("playwright_stealth not installed. Falling back to basic stealth.", "yellow"))
     stealth_async = None
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.CRITICAL)
+
+
 
 # Expanded list of realistic user agents
 USER_AGENTS = [
@@ -44,8 +46,8 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
     all_discovered_urls = set()  # Store all URLs encountered
     websocket_urls = set()
     to_crawl = {target_url}
-    max_requests = 500  # Increased to capture more URLs
-    max_depth = 7  # Increased for deeper crawling
+    max_requests = 3000  # Increased to capture more URLs
+    max_depth = 15  # Increased for deeper crawling
     current_depth = 0
     per_page_timeout = 60
 
@@ -154,7 +156,6 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
                     except Exception as e:
                         logging.debug(f"Failed to fetch API: {url} - {e}")
                     return
-
                 crawled_urls.add(normalized_url)
                 all_discovered_urls.add(url)
                 print(colored(f"Crawling (Depth {depth}): {url}", "blue"))
@@ -262,7 +263,7 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
                         }
                     """)
                     interactive_elements = await page.query_selector_all('button, a[href], input[type="submit"], div[role="button"]')
-                    for element in interactive_elements[:30]:  # Increased interaction limit
+                    for element in interactive_elements[:50]:  # Increased interaction limit
                         try:
                             if await element.is_visible():
                                 await element.click()
