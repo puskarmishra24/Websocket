@@ -31,8 +31,8 @@ async def main():
             target_urls = [url.strip() for url in urls_input.split(',')]
         
     elif input_method == "2":
-        #csv_file = r"C:\Users\puska\OneDrive\Documents\Github\Websocket\websites.csv"
-        csv_file = r"D:\GitHub\Websocket\websites.csv"
+        csv_file = r"C:\Users\puska\OneDrive\Documents\Github\Websocket\websites.csv"
+        # csv_file = r"D:\GitHub\Websocket\websites.csv"
         try:
             with open(csv_file, newline='') as csvfile:
                 reader = csv.DictReader(csvfile)
@@ -72,22 +72,35 @@ async def main():
         print(colored("[*] Crawling website...", "yellow"))
         try:
             crawl_data = await crawler.crawl_website(target_url)
+            if not isinstance(crawl_data, dict):
+                print(colored("Crawling failed to return expected data structure. Skipping this site.", "red"))
+                continue
+
             print(colored(f"[+] Crawling complete: {crawl_data['num_crawls']} URLs, {crawl_data['num_websockets']} WebSocket endpoints", "green"))
             print(colored("\nCrawled URLs:", "cyan"))
             for i, url in enumerate(crawl_data['crawled_urls'], 1):
                 print(colored(f"  {i}. {url}", "white"))
-            print(colored("\nWebSocket Endpoints:", "cyan"))
+
+            print(colored("\nWebSocket Endpoints:", "blue", attrs=["bold"]))
             if crawl_data['websocket_urls']:
                 for i, ws_url in enumerate(crawl_data['websocket_urls'], 1):
                     print(colored(f"  {i}. {ws_url}", "white"))
             else:
-                if input_method == 1:
-                    print(colored("  None found.", "yellow"))
+                if input_method == "2":
+                    try:
+                        index = target_urls.index(target_url)
+                        x = safety_sockets[index] if index < len(safety_sockets) else ""
+                        if x:
+                            print(colored("  None found from crawling. Using fallback WebSocket from CSV: ", "yellow") + x)
+                            crawl_data['websocket_urls'].append(x)
+                        else:
+                            print(colored("  None found and no fallback WebSocket in CSV.", "red"))
+                    except Exception as e:
+                        print(colored(f"  Error accessing fallback WebSocket: {e}", "red"))
                 else:
-                    x = safety_sockets[target_urls.index(target_url)]
-                    print("No WebSocket endpoints found. Using RFC6455 documented WebSocket: ",x)
-                    print()
-                    crawl_data['websocket_urls'].append(x)
+                    print(colored("  None found.", "yellow"))
+
+
         except Exception as e:
             print(colored(f"[-] Error crawling {target_url}: {e}", "red"))
             crawl_data = {
@@ -121,8 +134,8 @@ async def main():
         else:
             print(colored("[*] Starting WebSocket attack...", "yellow"))
             try:
-                #vulnerabilities = attack.attack_website(websocket_urls)
-                print(websocket_urls)
+                vulnerabilities = attack.attack_website(websocket_urls)
+                # print(websocket_urls)
                 vulnerabilities = []
                 print(colored(f"[+] Attack complete: {len(vulnerabilities)} vulnerabilities found", "green"))
                 

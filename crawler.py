@@ -17,8 +17,6 @@ except ImportError:
 
 logging.basicConfig(level=logging.CRITICAL)
 
-
-
 # Expanded list of realistic user agents
 USER_AGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
