@@ -50,7 +50,6 @@ async def main():
     if not target_urls:
         print(colored("No URLs provided. Exiting.", "red"))
         return
-    
     combined_results = {
         'scan_start_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'total_scan_duration': 0,
@@ -58,8 +57,9 @@ async def main():
         'total_vulnerabilities': {'High': 0, 'Medium': 0, 'Low': 0},
         'detailed_results': []
     }
-
-    for idx, target_url in enumerate(target_urls, 1):
+    all_ws = []
+    di = {}
+    for idx, target_url in enumerate(target_urls,1):
         if not target_url.startswith(('http://', 'https://')):
             print(colored(f"[-] Invalid URL: {target_url}. Skipping.", "red"))
             continue
@@ -83,6 +83,7 @@ async def main():
 
             print(colored("\nWebSocket Endpoints:", "blue", attrs=["bold"]))
             if crawl_data['websocket_urls']:
+                di[ws_url] = crawl_data["websocket_urls"]
                 for i, ws_url in enumerate(crawl_data['websocket_urls'], 1):
                     print(colored(f"  {i}. {ws_url}", "white"))
             else:
@@ -93,6 +94,7 @@ async def main():
                         if x:
                             print(colored("  None found from crawling. Using fallback WebSocket from CSV: ", "yellow") + x)
                             crawl_data['websocket_urls'].append(x)
+                            di[ws_url] = crawl_data["websocket_urls"]
                         else:
                             print(colored("  None found and no fallback WebSocket in CSV.", "red"))
                     except Exception as e:
@@ -111,9 +113,9 @@ async def main():
                 "crawl_notes": f"Error during crawl: {str(e)}"
             }
 
-        # Manual WebSocket input
+        #Manual WebSocket input
         websocket_urls = crawl_data['websocket_urls']
-        if not websocket_urls and input_method == 1:
+        if not websocket_urls and input_method == '1':
             manual_ws = input(colored("\n[?] No WebSocket endpoints found. Manually specify URLs? (yes/no): ", "yellow")).strip().lower()
             if manual_ws == "yes":
                 ws_input = input(colored("Enter WebSocket URLs (comma-separated, e.g., wss://example.com/ws): ", "cyan")).strip()
@@ -125,18 +127,26 @@ async def main():
                     print(colored("\nManually Specified WebSocket URLs:", "cyan"))
                     for i, ws_url in enumerate(websocket_urls, 1):
                         print(colored(f"  {i}. {ws_url}", "white"))
+                    all_ws.extend(crawl_data['websocket_urls'])
     # Attack phase
     perform_attack = input(colored("\n[?] Perform WebSocket attack? (yes/no): ", "yellow")).strip().lower()
     vulnerabilities = []
     if perform_attack == "yes":
-        if not websocket_urls:
+        if not all_ws:
             print(colored("[-] No WebSocket endpoints to attack.", "red"))
         else:
             print(colored("[*] Starting WebSocket attack...", "yellow"))
             try:
-                vulnerabilities = attack.attack_website(websocket_urls)
-                # print(websocket_urls)
-                vulnerabilities = []
+                for key,val in di:
+                    for ws in val:
+                        yesno = attack.test_working_websocket(ws)
+                        if yesno != True:
+                            val.remove(ws)
+                    if len(val) > 0:        
+                        vulnerabilities = attack.attack_website(val)
+                    else:
+                        print(colored("All WebSocket URLs failed the test. No public keyless WS URL available. Skipping the website:"+key, "red"))
+                
                 print(colored(f"[+] Attack complete: {len(vulnerabilities)} vulnerabilities found", "green"))
                 
             except Exception as e:

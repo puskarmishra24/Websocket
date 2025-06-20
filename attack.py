@@ -14,6 +14,7 @@ import struct
 import random
 import string
 import requests
+from hashlib import sha1
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -33,35 +34,77 @@ def attack_website(websocket_urls):
     vulnerabilities = perform_websocket_tests(websocket_urls, websocket_payloads)
     return vulnerabilities
 
-def send_raw_handshake(host, port, request_headers, scheme="ws", timeout=5):
-    """Send a raw WebSocket handshake."""
+def send_raw_handshake(host, port, request_headers, scheme="ws", timeout=10):
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(timeout)
+
         if scheme == "wss":
-            ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-            ssl_context.verify_mode = ssl.CERT_REQUIRED
-            ssl_context.load_default_certs()
+            ssl_context = ssl.create_default_context()
             s = ssl_context.wrap_socket(s, server_hostname=host)
+
+        logging.info(f"Connecting to {host}:{port}...")
         s.connect((host, port))
+        logging.info(f"Sending request:\n{request_headers}")
         s.send(request_headers.encode())
+
         response = b""
-        while True:
-            data = s.recv(4096)
-            if not data:
+        while b"\r\n\r\n" not in response:
+            try:
+                data = s.recv(4096)
+                if not data:
+                    break
+                response += data
+            except socket.timeout:
                 break
-            response += data
+
+        # Truncate response after header
+        header_end = response.find(b"\r\n\r\n")
+        if header_end != -1:
+            response = response[:header_end + 4]  # Include the \r\n\r\n
+
+        
+        logging.info(f"Received response:\n{response.decode(errors='ignore')}")
         return response.decode(errors="ignore")
-    except socket.timeout:
-        logging.info(f"Handshake timed out for {host}:{port}")
-        return None
-    except (socket.error, ssl.SSLError, UnicodeDecodeError) as e:
+
+    except Exception as e:
         logging.info(f"Handshake failed for {host}:{port}: {e}")
         return None
     finally:
-        if s:
+        try:
             s.close()
+        except:
+            pass
+
+def test_working_websocket(link):
+    """Test non-base64 Sec-WebSocket-Key header (Vuln #2)."""
     
+    key = b64encode(b"1234567890123456").decode()
+    parsed_url = urlparse(link)
+    host = parsed_url.hostname
+    port = parsed_url.port or (443 if parsed_url.scheme == 'wss' else 80)
+    path = parsed_url.path or "/"
+    scheme = parsed_url.scheme
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
+    try:
+        response = send_raw_handshake(host, port, req, scheme)
+        print(response)
+        if response is None:
+            return None
+        if "101 Switching Protocols" in response:
+            return True
+        
+    except Exception as e:
+        logging.info(f"Error in test_non_base64_sec_websocket_key for {host}:{port}: {e}")
+        
 
 def send_custom_frame(ws_url, frame_data):
     """Send a custom WebSocket frame."""
@@ -152,12 +195,14 @@ def test_fuzzing(ws_url, payload):
     
 def test_omit_sec_websocket_key(host, port, path="/", scheme="ws"):
     """Test omitting Sec-WebSocket-Key header (Vuln #1)."""
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -176,13 +221,16 @@ Sec-WebSocket-Version: 13\r\n
     
 def test_non_base64_sec_websocket_key(host, port, path="/", scheme="ws"):
     """Test non-base64 Sec-WebSocket-Key header (Vuln #2)."""
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: NotBase64!!\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: NotBase64!!\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme=scheme)
         if response is None:
@@ -202,13 +250,16 @@ Sec-WebSocket-Version: 13\r\n
 def test_oversized_sec_websocket_key(host, port, path="/", scheme="ws"):
     """Test oversized Sec-WebSocket-Key header (Vuln #3)."""
     big_key = b64encode(b"A" * 1024).decode()  # 1KB key
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {big_key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {big_key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -236,6 +287,16 @@ Sec-WebSocket-Key: {key}\r\n
 Sec-WebSocket-Key: {key}duplicate\r\n
 Sec-WebSocket-Version: 13\r\n
 \r\n"""
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    f"Sec-WebSocket-Key: {key}duplicate\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     
     try:
         response = send_raw_handshake(host, port, req, scheme)
@@ -258,12 +319,15 @@ Sec-WebSocket-Version: 13\r\n
 def test_missing_sec_websocket_version(host, port, path="/", scheme="ws"):
     """Test missing Sec-WebSocket-Version header (Vuln #5)."""
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-\r\n"""
+    
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -283,13 +347,16 @@ Sec-WebSocket-Key: {key}\r\n
 def test_invalid_sec_websocket_version(host, port, path="/", scheme="ws"):
     """Test invalid Sec-WebSocket-Version header (Vuln #6)."""
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 999\r\n
-\r\n"""
+    
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 999\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -309,14 +376,17 @@ Sec-WebSocket-Version: 999\r\n
 def test_conflicting_sec_websocket_version(host, port, path="/", scheme="ws"):
     """Test conflicting Sec-WebSocket-Version headers (Vuln #7)."""
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-Sec-WebSocket-Version: 8\r\n
-\r\n"""
+    
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "Sec-WebSocket-Version: 8\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -336,13 +406,16 @@ Sec-WebSocket-Version: 8\r\n
 def test_wrong_upgrade_header(host, port, path="/", scheme="ws"):
     """Test wrong Upgrade header (Vuln #8)."""
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocketty\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocketty\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -362,12 +435,15 @@ Sec-WebSocket-Version: 13\r\n
 def test_missing_connection_header(host, port, path="/", scheme="ws"):
     """Test missing Connection header (Vuln #9)."""
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -394,6 +470,15 @@ cOnneCtion: Upgrade\r\n
 sEc-websocKet-key: {key}\r\n
 Sec-WebSocket-Version: 13\r\n
 \r\n"""
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "uPgradE: websocket\r\n"
+    "cOnneCtion: Upgrade\r\n"
+    f"sEc-websocKet-key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -413,13 +498,16 @@ Sec-WebSocket-Version: 13\r\n
 def test_non_get_method(host, port, path="/", scheme="ws"):
     """Test non-GET method for handshake (Vuln #11)."""
     key = b64encode(b"1234567890123456").decode()
-    req = f"""POST {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    
+    req = (
+    f"POST {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -436,44 +524,127 @@ Sec-WebSocket-Version: 13\r\n
         logging.info(f"Error in test_non_get_method for {host}:{port}: {e}")
         return None
     
+from base64 import b64encode
+import logging
+
 def test_fake_http_status(host, port, path="/", scheme="ws"):
     """Test fake HTTP status code (Vuln #12)."""
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+
+    # Proper WebSocket handshake
+    req = (
+        f"GET {path} HTTP/1.1\r\n"
+        f"Host: {host}\r\n"
+        "Upgrade: websocket\r\n"
+        "Connection: Upgrade\r\n"
+        f"Sec-WebSocket-Key: {key}\r\n"
+        "Sec-WebSocket-Version: 13\r\n"
+        "\r\n"
+    )
+
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
             return None
-        return {
-            'name': 'Fake HTTP Status',
-            'risk': 'High',
-            'description': f"Server at {host}:{port} returned unexpected HTTP status.",
-            'solution': 'Ensure server returns 101 Switching Protocols for valid handshakes.',
-            'affected_host': f"{host}:{port}",
-            'impact': 'Incorrect status codes can confuse clients.'
-        } if "101 Switching Protocols" in response else None
+
+        # Extract the first status line from the response
+        status_line = response.split("\r\n", 1)[0].strip()
+
+        if status_line != "HTTP/1.1 101 Switching Protocols":
+            return {
+                'name': 'Fake HTTP Status',
+                'risk': 'High',
+                'description': f"Server at {host}:{port} returned unexpected status: {status_line}",
+                'solution': 'Ensure server returns "HTTP/1.1 101 Switching Protocols" for valid handshakes.',
+                'affected_host': f"{host}:{port}",
+                'impact': 'Clients may be tricked into accepting invalid upgrades or downgrade attacks.'
+            }
+
+        # Server responded correctly — no issue
+        return None
+
     except Exception as e:
         logging.info(f"Error in test_fake_http_status for {host}:{port}: {e}")
         return None
+
+    
+def test_wrong_sec_websocket_accept(host, port, path="/", scheme="ws"):
+    """Test wrong Sec-WebSocket-Accept value from server (Vuln #13)."""
+
+    key = b64encode(b"1234567890123456").decode()
+
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
+    try:
+        response = send_raw_handshake(host, port, req, scheme)
+        if response is None:
+            return None
+
+        # Parse response headers
+        lines = response.split("\r\n")
+        accept_header = [line.strip() for line in lines if line.lower().startswith("sec-websocket-accept:")]
+        
+        print("🔹 Raw Response:\n", response)
+        print("🔹 Parsed Sec-WebSocket-Accept header:\n", accept_header)
+
+        if not accept_header:
+            return {
+                'name': 'Wrong Sec-WebSocket-Accept',
+                'risk': 'Medium',
+                'description': f"Server at {host}:{port} did not return a Sec-WebSocket-Accept header.",
+                'solution': 'Ensure server follows RFC 6455 and sends correct Sec-WebSocket-Accept header.',
+                'affected_host': f"{host}:{port}",
+                'impact': 'Clients may accept invalid or spoofed handshakes.'
+            }
+
+        server_accept = accept_header[0].split(":", 1)[1].strip()
+        print("🔹 Server Accept Value:", server_accept)
+
+        # Compute expected Sec-WebSocket-Accept value
+        GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+        expected_accept = b64encode(sha1((key + GUID).encode()).digest()).decode()
+        print("🔹 Expected Accept Value:", expected_accept)
+
+        if server_accept != expected_accept:
+            return {
+                'name': 'Wrong Sec-WebSocket-Accept',
+                'risk': 'Medium',
+                'description': f"Server at {host}:{port} returned invalid Sec-WebSocket-Accept: {server_accept}",
+                'solution': 'Fix server to generate correct Sec-WebSocket-Accept header as per RFC 6455.',
+                'affected_host': f"{host}:{port}",
+                'impact': 'Clients may accept spoofed or malformed handshakes, risking data leakage.'
+            }
+
+        # All good — no issue found
+        return None
+
+    except Exception as e:
+        logging.info(f"Error in test_wrong_sec_websocket_accept for {host}:{port}: {e}")
+        return None
+
     
 def test_oversized_headers(host, port, path="/", scheme="ws"):
     """Test oversized headers (Vuln #14)."""
     big_value = "A" * 8000
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-X-Big-Header: {big_value}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    f"X-Big-Header: {big_value}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -493,12 +664,14 @@ Sec-WebSocket-Version: 13\r\n
 def test_missing_host_header(host, port, path="/", scheme="ws"):
     """Test missing Host header (Vuln #15)."""
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -518,13 +691,15 @@ Sec-WebSocket-Version: 13\r\n
 def test_fake_host_header(host, port, path="/", scheme="ws"):
     """Test fake Host header (Vuln #16)."""
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: fake.example.com\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    "Host: fake.example.com\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -552,6 +727,16 @@ Connection: Upgrade\r\n
 Sec-WebSocket-Key: {key}\r\n
 Sec-WebSocket-Version: 13\r\n
 \r\n"""
+    req = (
+    f"GET {path} HTTP/1.1\r\n"
+    f"Host: real.example.com\r\n"
+    f"Host: fake.example.com\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -572,13 +757,16 @@ def test_long_url_path(host, port, path="/", scheme="ws"):
     """Test long URL path (Vuln #18)."""
     long_path = "/" + "a" * 2048
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {long_path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    
+    req = (
+    f"GET {long_path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -599,13 +787,16 @@ def test_unicode_url(host, port, path="/", scheme="ws"):
     """Test Unicode URL (Vuln #19)."""
     unicode_path = "/%F0%9F%98%80"  # Smiling emoji
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {unicode_path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    
+    req = (
+    f"GET {unicode_path} HTTP/1.1\r\n"
+    f"Host: {host}\r\n"
+    "Upgrade: websocket\r\n"
+    "Connection: Upgrade\r\n"
+    f"Sec-WebSocket-Key: {key}\r\n"
+    "Sec-WebSocket-Version: 13\r\n"
+    "\r\n"
+)
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
@@ -1953,7 +2144,7 @@ def perform_websocket_tests(websocket_urls, payloads):
             test_case_sensitive_headers,  # 10
             test_non_get_method,  # 11
             test_fake_http_status,  # 12
-            #test_wrong_sec_websocket_accept,  # 13 (Commented out because it's not defined)
+            test_wrong_sec_websocket_accept,  # 13 
             test_oversized_headers,  # 14
             test_missing_host_header,  # 15
             test_fake_host_header,  # 16

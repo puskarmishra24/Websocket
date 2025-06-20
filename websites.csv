@@ -1,32 +1,26 @@
-Website_URL,WebSocket_URL,Protocol,Category,Notes
-https://www.slack.com,wss://slack.com/ws,wss://,Collaboration,Known for using WebSocket for real-time messaging.
-https://www.cryptocompare.com,wss://streamer.cryptocompare.com,wss://,Cryptocurrency,Used for streaming live cryptocurrency prices.
-http://example-chat.com,ws://example-chat.com/chat,ws://,Chat Application,Hypothetical example of a simple chat app using non-secure WebSocket.
-https://www.tradingview.com,wss://data.tradingview.com/socket.io,wss://,Stock Market,Known for real-time stock and trading data updates.
-https://www.twitch.tv,wss://irc-ws.chat.twitch.tv,wss://,Live Streaming,Uses WebSocket for live chat during streams.
-http://example-game.com,ws://example-game.com/game,ws://,Online Gaming,Hypothetical example of a multiplayer game using non-secure WebSocket.
-https://www.discord.com,wss://gateway.discord.gg,wss://,Communication,Uses WebSocket for real-time voice and text communication.
-https://www.binance.com,wss://stream.binance.com:9443/ws,wss://,Cryptocurrency,Provides live market data updates via WebSocket.
-https://www.figma.com,wss://ws.figma.com,wss://,Collaboration,Uses WebSocket for real-time collaborative design updates.
-
-
-https://websocket.org,wss://echo.websocket.org,wss,Testing,Echo test server :contentReference[oaicite:1]{index=1}
-https://kaazing.com,wss://demos.kaazing.com/echo,wss,Testing,Echo demo :contentReference[oaicite:2]{index=2}
-https://kaazing.com,ws://demos.kaazing.com/amqp,ws,Messaging,AMQP over WS :contentReference[oaicite:3]{index=3}
-https://ifelse.io,wss://ws.ifelse.io,wss,Testing,Alternate echo server :contentReference[oaicite:4]{index=4}
-https://websockets.chilkat.io,wss://websockets.chilkat.io,ws,Testing,Live Chilkat echo server :contentReference[oaicite:5]{index=5}
-https://postman.com,wss://ws.postman-echo.com/raw,wss,Testing,Raw echo server :contentReference[oaicite:6]{index=6}
-https://postman.com,wss://ws.postman-echo.com/socketio,wss,Testing,Socket.IO echo :contentReference[oaicite:7]{index=7}
-https://nownodes.io,wss://public-eth.nownodes.io/ws,wss,Blockchain,Eth public RPC
-https://nownodes.io,wss://public-btc.nownodes.io/ws,wss,Blockchain,BTC public RPC
-https://publicnode.com,wss://rpc.publicnode.com/ws,wss,Blockchain,Multi‑chain RPC
-https://ankr.com,wss://rpc.ankr.com/ws,wss,Blockchain,Ankr public RPC
-https://coinsdo.com,wss://ws.coinsdo.com/ws,wss,Blockchain,Multi‑chain RPC
-http://ws.vi-server.org,ws://ws.vi-server.org/mirror,ws,Testing,Mirror echo server :contentReference[oaicite:8]{index=8}
-http://websocket-echo-intustack.koyeb.app,ws://websocket-echo-intustack.koyeb.app,ws,Testing,Custom echo endpoint :contentReference[oaicite:9]{index=9}
-https://echo-websocket.fly.dev,wss://echo-websocket.fly.dev/.ws,wss,Testing,Community echo server :contentReference[oaicite:10]{index=10}
-https://github.com/websockets/websocket-echo-server,ws://demo.websocket-echo-server/ws,ws,Testing,Demo echo server :contentReference[oaicite:11]{index=11}
-https://github.com/fdeantoni/echo-server,ws://echo-server/ws,ws,Testing,Project echo endpoint :contentReference[oaicite:12]{index=12}
-https://github.com/kuznetsss/hyper_echo,ws://hyper-echo/ws,ws,Testing,Rust echo server :contentReference[oaicite:13]{index=13}
-https://echo.websocket.org,ws://echo.websocket.org,ws,Testing,HTTP echo endpoint :contentReference[oaicite:14]{index=14}
-https://socketsbay.com,wss://socketsbay.com/wss/v2/1/demo/,wss,Testing,Demo chat server
+Website_URL,WebSocket_URL
+https://www.cryptocompare.com,wss://streamer.cryptocompare.com/v2
+https://www.tradingview.com,wss://data.tradingview.com/socket.io
+https://www.twitch.tv,wss://irc-ws.chat.twitch.tv
+https://www.discord.com,wss://gateway.discord.gg
+https://www.binance.com,wss://stream.binance.com:9443/ws
+https://websocket.org,wss://echo.websocket.org
+https://kaazing.com,wss://demos.kaazing.com/echo
+https://ifelse.io,wss://ws.ifelse.io
+https://postman.com,wss://ws.postman-echo.com/raw
+https://nownodes.io,wss://public-btc.nownodes.io/wss
+https://publicnode.com,wss://rpc.publicnode.com/ws
+https://ankr.com,wss://ws.hotjar.com/api/v2/client/ws?v=7&site_id=3065256
+https://coinsdo.com,wss://ws.coinsdo.com/ws
+http://ws.vi-server.org,ws://ws.vi-server.org/mirror
+http://websocket-echo-intustack.koyeb.app,ws://websocket-echo-intustack.koyeb.app
+https://echo-websocket.fly.dev,wss://echo-websocket.fly.dev/.ws
+https://socketsbay.com,wss://socketsbay.com/wss/v2/1/demo/
+https://www.okx.com/docs-v5/en/#overview,wss://ws.okx.com:8443/ws/v5/public
+https://docs.kraken.com/api/,wss://ws.kraken.com
+https://www.blockchain.com/en/,wss://ws.blockchain.info/inv
+https://docs.bitfinex.com/docs/introduction,wss://api-pub.bitfinex.com/ws/2
+https://www.bitstamp.net/,wss://ws.bitstamp.net
+https://docs.gemini.com/get-started/intro,wss://api.gemini.com/v1/marketdata/btcusd
+https://pro.coincap.io/api-docs,"wss://ws.coincap.io/prices?assets=bitcoin,ethereum"
+https://developers.binance.com/en,wss://stream.binance.com:9443/ws/btcusdt@trade
