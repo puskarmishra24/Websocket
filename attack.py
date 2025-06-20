@@ -96,7 +96,6 @@ def test_working_websocket(link):
 )
     try:
         response = send_raw_handshake(host, port, req, scheme)
-        print(response)
         if response is None:
             return None
         if "101 Switching Protocols" in response:
@@ -590,9 +589,6 @@ def test_wrong_sec_websocket_accept(host, port, path="/", scheme="ws"):
         # Parse response headers
         lines = response.split("\r\n")
         accept_header = [line.strip() for line in lines if line.lower().startswith("sec-websocket-accept:")]
-        
-        print("🔹 Raw Response:\n", response)
-        print("🔹 Parsed Sec-WebSocket-Accept header:\n", accept_header)
 
         if not accept_header:
             return {
@@ -605,12 +601,10 @@ def test_wrong_sec_websocket_accept(host, port, path="/", scheme="ws"):
             }
 
         server_accept = accept_header[0].split(":", 1)[1].strip()
-        print("🔹 Server Accept Value:", server_accept)
 
         # Compute expected Sec-WebSocket-Accept value
         GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
         expected_accept = b64encode(sha1((key + GUID).encode()).digest()).decode()
-        print("🔹 Expected Accept Value:", expected_accept)
 
         if server_accept != expected_accept:
             return {
@@ -2074,29 +2068,31 @@ def test_query_parameter_flood(ws_url):
 def perform_websocket_tests(websocket_urls, payloads):
     """Perform WebSocket security tests."""
     vulnerabilities = []
-    # with ThreadPoolExecutor(max_workers=5) as executor:
-    #     print("Starting primary checks: Origin Check, Authentication, Protocol Fuzzing")
-    #     # 1️⃣ Test Origin Check
-    #     origin_results = executor.map(test_origin_check, websocket_urls)
-    #     vulnerabilities.extend([v for v in origin_results if v])
-        
-    #     # 2️⃣ Test Authentication
-    #     auth_results = executor.map(test_authentication, websocket_urls)
-    #     vulnerabilities.extend([v for v in auth_results if v])
-        
-    #     # 3️⃣ Protocol Fuzzing
-    #     fuzz_results = []
-    #     for ws_url in websocket_urls:
-    #         fuzz_results.extend(executor.map(lambda p: test_fuzzing(ws_url, p), payloads))
-    #     vulnerabilities.extend([v for v in fuzz_results if v])
-
+    di1 = {}
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        print("Starting primary checks: Origin Check, Authentication, Protocol Fuzzing")
+        # 1️⃣ Test Origin Check
+        origin_results = executor.map(test_origin_check, websocket_urls)
+        vulnerabilities.append([v for v in origin_results if v])
+        di1['Origin_Check'] = len(vulnerabilities[0])
+        # 2️⃣ Test Authentication
+        auth_results = executor.map(test_authentication, websocket_urls)
+        vulnerabilities.append([v for v in auth_results if v])
+        di1['Authentication'] = len(vulnerabilities[1])
+        # 3️⃣ Protocol Fuzzing
+        fuzz_results = []
+        for ws_url in websocket_urls:
+            fuzz_results.extend(executor.map(lambda p: test_fuzzing(ws_url, p), payloads))
+        vulnerabilities.append([v for v in fuzz_results if v])
+        di1["Fuzzing"] = len(vulnerabilities[2])
     # 4️⃣ Handshake & HTTP Request Tests (Vuln #1-22)
+    handshake_res = []
     print("Starting Handshake & HTTP Request Tests")
     for ws_url in websocket_urls:
         parsed_url = urlparse(ws_url)
         if parsed_url.scheme not in ['ws', 'wss']:
             
-            vulnerabilities.append(
+            handshake_res.append(
                 {
                 'name': 'Non-WebSocket Scheme',
                 'risk': 'High',
@@ -2115,7 +2111,7 @@ def perform_websocket_tests(websocket_urls, payloads):
         try:
             port = int(port)  # Ensure port is an integer
             if not (0 <= port <= 65535):
-                vulnerabilities.append(
+                handshake_res.append(
                 {
                 'name': 'Invalid Port',
                 'risk': 'Medium',
@@ -2159,7 +2155,7 @@ def perform_websocket_tests(websocket_urls, payloads):
             i+=1
             result = test_func(host, port, path,parsed_url.scheme)
             if result:
-                vulnerabilities.append(result)
+                handshake_res.append(result)
 
         # Tests requiring ws_url
         ws_handshake_tests = [
@@ -2171,9 +2167,11 @@ def perform_websocket_tests(websocket_urls, payloads):
         #     i+=1
         #     result = test_func(ws_url)
         #     if result:
-        #         vulnerabilities.append(result)
-
+        #         handshake_res.append(result)
+        vulnerabilities.append(handshake_res)
+        di1["Handshake"] = len(handshake_res)
     # # 5️⃣ Payload Handling & Fragmentation Tests (Vuln #23-40)
+    payload_res = []
     # print("Starting Payload Handling & Fragmentation Tests")
 
     # for ws_url in websocket_urls:
@@ -2203,9 +2201,12 @@ def perform_websocket_tests(websocket_urls, payloads):
     #         i+=1
     #         result = test_func(ws_url)
     #         if result:
-    #             vulnerabilities.append(result)
+    #             payload_res.append(result)
+    vulnerabilities.append(payload_res)
+    di1["Payload"] = len(payload_res)
     
     # # 6️⃣ Authentication & Session Management Tests (Vuln #41-46)
+    session_res = []
     # print("Starting Authentication & Session Management Tests")
     # for ws_url in websocket_urls:
     #     auth_session_tests = [
@@ -2222,9 +2223,11 @@ def perform_websocket_tests(websocket_urls, payloads):
     #         i+=1
     #         result = test_func(ws_url)
     #         if result:
-    #             vulnerabilities.append(result)
-
+    #             session_res.append(result)
+    vulnerabilities.append(session_res)
+    di1["Session"] = len(session_res)
     # # 7️⃣ Subprotocol & Extension Tests (Vuln #47-51)
+    subprotocol_res = []
     # print('Subprotocol & Extension Tests')
     # for ws_url in websocket_urls:
     #     parsed_url = urlparse(ws_url)
@@ -2242,7 +2245,7 @@ def perform_websocket_tests(websocket_urls, payloads):
     #         i+=1
     #         result = test_func(host, port, path)
     #         if result:
-    #             vulnerabilities.append(result)
+    #             subprotocol_res.append(result)
 
     #     ws_subprotocol_tests = [
     #         test_invalid_subprotocol,  # 47
@@ -2256,11 +2259,13 @@ def perform_websocket_tests(websocket_urls, payloads):
     #         i+=1
     #         result = test_func(ws_url)
     #         if result:
-    #             vulnerabilities.append(result)
+    #             subprotocol_res.append(result)
+    vulnerabilities.append(subprotocol_res)
+    di1['Subprotocol'] = len(subprotocol_res)
 
     # # 8️⃣ Security & Encryption Tests (Vuln #52-56)
     # print('Starting Security & Encryption Tests')
-    # security_results = []
+    security_results = []
     # for ws_url in websocket_urls:
     #     parsed_url = urlparse(ws_url)
     #     host = parsed_url.hostname
@@ -2276,7 +2281,7 @@ def perform_websocket_tests(websocket_urls, payloads):
     #         i+=1
     #         result = test_func(host, port, path)
     #         if result:
-    #             vulnerabilities.append(result)
+    #             security_results.append(result)
 
     #     ws_security_tests = [
     #         test_tls_downgrade,  # 54
@@ -2288,9 +2293,11 @@ def perform_websocket_tests(websocket_urls, payloads):
     #         i+=1
     #         result = test_func(ws_url)
     #         if result:
-    #             vulnerabilities.append(result)
-
+    #             security_results.append(result)
+    vulnerabilities.append(security_results)
+    di1['Security'] = len(security_results)
     # # 9️⃣ DoS & Resource Management Tests (Vuln #57-64)
+    dos_res = []
     # print('Starting DoS & Resource Management Tests')
     # for ws_url in websocket_urls:
     #     parsed_url = urlparse(ws_url)
@@ -2315,11 +2322,12 @@ def perform_websocket_tests(websocket_urls, payloads):
     #         i+=1
     #         result = test_func(ws_url)
     #         if result:
-    #             vulnerabilities.append(result)
-
+    #             dos_res.append(result)
+    vulnerabilities.append(dos_res)
+    di1['DOS'] = dos_res
     # # 🔟 Cross-Origin & Mixed Content Tests (Vuln #65-69)
     # print("Starting Cross-Origin & Mixed Content Tests")
-
+    cos_res = []
     # for ws_url in websocket_urls:
     #     cross_origin_tests = [
     #         test_missing_cors_headers,  # 65
@@ -2334,11 +2342,12 @@ def perform_websocket_tests(websocket_urls, payloads):
     #         i+=1
     #         result = test_func(ws_url)
     #         if result:
-    #             vulnerabilities.append(result)
-
+    #             cos_res.append(result)
+    vulnerabilities.append(cos_res)
+    di1['Cross_Origin'] = len(cos_res)
     # # 1️⃣1️⃣ Other Vulnerabilities Tests (Vuln #70-75)
     # print("Starting Other Vulnerabilities Tests")
-
+    others = []
     # for ws_url in websocket_urls:
     #     parsed_url = urlparse(ws_url)
     #     host = parsed_url.hostname
@@ -2359,6 +2368,8 @@ def perform_websocket_tests(websocket_urls, payloads):
     #         i+=1
     #         result = test_func(ws_url)
     #         if result:
-    #             vulnerabilities.append(result)
+    #             others.append(result)
+    vulnerabilities.append(others)
+    di1['Others'] = len("Others")
     print("All tests completed.")
-    return vulnerabilities
+    return vulnerabilities, di1

@@ -83,9 +83,11 @@ async def main():
 
             print(colored("\nWebSocket Endpoints:", "blue", attrs=["bold"]))
             if crawl_data['websocket_urls']:
-                di[ws_url] = crawl_data["websocket_urls"]
                 for i, ws_url in enumerate(crawl_data['websocket_urls'], 1):
                     print(colored(f"  {i}. {ws_url}", "white"))
+                di[target_url] = crawl_data["websocket_urls"]
+                all_ws.extend(crawl_data["websocket_urls"])
+
             else:
                 if input_method == "2":
                     try:
@@ -94,7 +96,7 @@ async def main():
                         if x:
                             print(colored("  None found from crawling. Using fallback WebSocket from CSV: ", "yellow") + x)
                             crawl_data['websocket_urls'].append(x)
-                            di[ws_url] = crawl_data["websocket_urls"]
+                            di[target_url] = crawl_data["websocket_urls"]
                         else:
                             print(colored("  None found and no fallback WebSocket in CSV.", "red"))
                     except Exception as e:
@@ -113,21 +115,25 @@ async def main():
                 "crawl_notes": f"Error during crawl: {str(e)}"
             }
 
-        #Manual WebSocket input
-        websocket_urls = crawl_data['websocket_urls']
-        if not websocket_urls and input_method == '1':
-            manual_ws = input(colored("\n[?] No WebSocket endpoints found. Manually specify URLs? (yes/no): ", "yellow")).strip().lower()
-            if manual_ws == "yes":
-                ws_input = input(colored("Enter WebSocket URLs (comma-separated, e.g., wss://example.com/ws): ", "cyan")).strip()
+    #Manual WebSocket input
+    websocket_urls = crawl_data['websocket_urls']
+    if not websocket_urls and input_method == '1':
+        manual_ws = input(colored("\n[?] No WebSocket endpoints found. Manually specify URLs? (yes/no): ", "yellow")).strip().lower()
+        if manual_ws == "yes":
+            for i in range(len(target_urls)):
+                ws_input = input(colored(f"Enter WebSocket URLs for {i} (comma-separated, e.g., wss://example.com/ws): ", "cyan")).strip()
                 if ws_input:
                     websocket_urls = [ws_url.strip() for ws_url in ws_input.split(',')]
                     crawl_data['websocket_urls'] = websocket_urls
                     crawl_data['num_websockets'] = len(websocket_urls)
                     crawl_data['crawl_notes'] = "WebSocket URLs manually specified"
                     print(colored("\nManually Specified WebSocket URLs:", "cyan"))
-                    for i, ws_url in enumerate(websocket_urls, 1):
-                        print(colored(f"  {i}. {ws_url}", "white"))
-                    all_ws.extend(crawl_data['websocket_urls'])
+                    all_ws.extend(websocket_urls)
+                    di[i] = websocket_urls
+                
+
+                for i, ws_url in enumerate(websocket_urls, 1):
+                    print(colored(f"  {i}. {ws_url}", "white"))
     # Attack phase
     perform_attack = input(colored("\n[?] Perform WebSocket attack? (yes/no): ", "yellow")).strip().lower()
     vulnerabilities = []
@@ -137,18 +143,15 @@ async def main():
         else:
             print(colored("[*] Starting WebSocket attack...", "yellow"))
             try:
-                for key,val in di:
-                    for ws in val:
-                        yesno = attack.test_working_websocket(ws)
-                        if yesno != True:
-                            val.remove(ws)
-                    if len(val) > 0:        
-                        vulnerabilities = attack.attack_website(val)
+                for key, val in di.items():
+                    valid_ws = [ws for ws in val if attack.test_working_websocket(ws)]
+                    if valid_ws:
+                        vulnerabilities, ds = attack.attack_website(valid_ws)
                     else:
-                        print(colored("All WebSocket URLs failed the test. No public keyless WS URL available. Skipping the website:"+key, "red"))
-                
+                        print(colored("All WebSocket URLs failed the test. Skipping the website: " + key, "red"))
+
                 print(colored(f"[+] Attack complete: {len(vulnerabilities)} vulnerabilities found", "green"))
-                
+
             except Exception as e:
                 print(colored(f"[-] Error during attack: {e}", "red"))
 
