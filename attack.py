@@ -14,6 +14,7 @@ from termcolor import colored
 import struct
 import random
 import string
+import binascii
 import requests
 from hashlib import sha1
 
@@ -105,18 +106,30 @@ def test_working_websocket(link):
     except Exception as e:
         logging.info(f"Error in test_non_base64_sec_websocket_key for {host}:{port}: {e}")
         
-
 def send_custom_frame(ws_url, frame_data):
-    """Send a custom WebSocket frame."""
+    """Send a custom WebSocket frame (binary) and return the server's response."""
     try:
         ws = WebSocket()
         ws.connect(ws_url, timeout=5)
+
+        # Debug: Print the frame in hex for inspection (optional)
+        print(colored(f"[DEBUG] Sending frame to {ws_url}: {binascii.hexlify(frame_data).decode()}", "cyan"))
+
         ws.send_binary(frame_data)
         response = ws.recv()
+
+        # Debug: Print the response (optional)
+        print(colored(f"[DEBUG] Received response from {ws_url}: {repr(response)}", "green"))
+
         ws.close()
         return response
+
     except WebSocketException as e:
-        print(colored(f"Custom frame failed for {ws_url}: {e}", "yellow"))
+        print(colored(f"[ERROR] Custom frame failed for {ws_url}: {e}", "yellow"))
+        return None
+
+    except Exception as e:
+        print(colored(f"[EXCEPTION] Unexpected error for {ws_url}: {e}", "red"))
         return None
 
 def test_origin_check(ws_url):
@@ -887,8 +900,23 @@ def test_non_ws_scheme(ws_url):
 def test_undefined_opcode(ws_url):
     """Test undefined opcode (Vuln #23)."""
     try:
-        frame = struct.pack("!B", 0x83) + struct.pack("!B", 0x04) + b"test"  # FIN=1, Opcode=0x3, Length=4
+        payload = b"test"
+        payload_len = len(payload)
+
+        # Create masking key (4 bytes)
+        masking_key = os.urandom(4)
+
+        # Mask the payload
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        # Build frame with undefined opcode 0x3 (binary + 1)
+        fin_opcode = 0x80 | 0x3  # FIN=1, Opcode=0x3
+        mask_len = 0x80 | payload_len  # MASK=1, payload length
+
+        frame = struct.pack("!BB", fin_opcode, mask_len) + masking_key + masked_payload
+
         response = send_custom_frame(ws_url, frame)
+
         return {
             'name': 'Undefined Opcode',
             'risk': 'High',
@@ -897,263 +925,607 @@ def test_undefined_opcode(ws_url):
             'affected_url': ws_url,
             'impact': 'Undefined opcodes can cause unexpected server behavior.'
         } if response else None
-    except:
-        return None
 
+    except Exception as e:
+        # You could log e here if needed
+        return None
+    
 def test_reserved_opcode(ws_url):
     """Test reserved opcode (Vuln #24)."""
-    frame = struct.pack("!B", 0x8B) + struct.pack("!B", 0x04) + b"test"  # FIN=1, Opcode=0xB, Length=4
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Reserved Opcode',
-        'risk': 'High',
-        'description': f"WebSocket at {ws_url} accepted frame with reserved opcode 0xB.",
-        'solution': 'Reject frames with reserved opcodes (0x3-0x7, 0xB-0xF).',
-        'affected_url': ws_url,
-        'impact': 'Reserved opcodes can lead to protocol errors.'
-    } if response else None
-
-def test_zero_length_fragment(ws_url):
-    """Test zero-length fragment (Vuln #25)."""
-    frame1 = struct.pack("!B", 0x01) + struct.pack("!B", 0x00)
-    frame2 = struct.pack("!B", 0x80) + struct.pack("!B", 0x04) + b"test"
     try:
-        ws = WebSocket()
-        ws.connect(ws_url, timeout=5)
-        ws.send_binary(frame1)
-        ws.send_binary(frame2)
-        response = ws.recv()
-        ws.close()
+        payload = b"test"
+        payload_len = len(payload)
+
+        # Generate 4-byte masking key
+        masking_key = os.urandom(4)
+
+        # Apply masking
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        # FIN = 1, opcode = 0xB (reserved)
+        fin_opcode = 0x80 | 0x0B
+        mask_payload_len = 0x80 | payload_len  # MASK bit set + length
+
+        # Full frame: [header][masking key][masked payload]
+        frame = struct.pack("!BB", fin_opcode, mask_payload_len) + masking_key + masked_payload
+
+        response = send_custom_frame(ws_url, frame)
+
         return {
-            'name': 'Zero-Length Fragment',
-            'risk': 'Low',
-            'description': f"WebSocket at {ws_url} accepted zero-length fragment.",
-            'solution': 'Reject zero-length fragments to prevent parsing issues.',
+            'name': 'Reserved Opcode',
+            'risk': 'High',
+            'description': f"WebSocket at {ws_url} accepted frame with reserved opcode 0xB.",
+            'solution': 'Reject frames with reserved opcodes (0x3-0x7, 0xB-0xF).',
             'affected_url': ws_url,
-            'impact': 'Zero-length fragments can cause server confusion.'
-        }
-    except WebSocketException as e:
-        print(colored(f"Zero-length fragment test failed for {ws_url}: {e}", "yellow"))
+            'impact': 'Reserved opcodes can lead to protocol errors.'
+        } if response else None
+
+    except Exception as e:
+        # Optionally log the exception
+        return None
+    
+def test_zero_length_fragment(ws_url):
+    """Test zero-length fragments (Vuln #25)."""
+    try:
+        # Prepare a list of zero-length FIN=0 fragments with opcode=0x1 (text)
+        # All frames are masked and follow RFC6455
+
+        results = []
+        for _ in range(3):  # Send 3 zero-length fragments
+            fin_opcode = 0x01  # FIN=0, Opcode=0x1 (text frame)
+            mask_len = 0x80 | 0x00  # MASK=1, Payload len = 0
+            masking_key = os.urandom(4)
+            frame = struct.pack("!BB", fin_opcode, mask_len) + masking_key
+
+            response = send_custom_frame(ws_url, frame)
+            results.append(response)
+
+            time.sleep(0.5)  # Give server time to process/buffer
+
+        if any(results):
+            return {
+                'name': 'Zero-Length Fragment',
+                'risk': 'Low',
+                'description': f"WebSocket at {ws_url} accepted zero-length fragments and responded unexpectedly.",
+                'solution': 'Reject or limit incomplete fragmented messages.',
+                'affected_url': ws_url,
+                'impact': 'Zero-length fragments can cause server confusion or buffer exhaustion.'
+            }
+
+        # If server gave no response to any zero-length fragment, it likely handled it safely
         return None
 
+    except Exception as e:
+        print(colored(f"[ERROR] Zero-length fragment test failed for {ws_url}: {e}", "yellow"))
+        return None
+    
 def test_invalid_payload_length(ws_url):
     """Test invalid payload length (Vuln #26)."""
-    frame = struct.pack("!B", 0x81) + struct.pack("!B", 0x0A) + b"test"
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Invalid Payload Length',
-        'risk': 'High',
-        'description': f"WebSocket at {ws_url} accepted frame with invalid payload length.",
-        'solution': 'Validate payload length matches actual data.',
-        'affected_url': ws_url,
-        'impact': 'Invalid lengths can cause buffer overflows or crashes.'
-    } if response else None
+    try:
+        payload = b"test"  # 4 bytes only
+        fake_len = 10  # Declare 10 bytes
+        masking_key = os.urandom(4)
+
+        # Mask only 4 bytes of data
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        # FIN=1, Opcode=0x1 (text); MASK=1, PayloadLen=10
+        fin_opcode = 0x81
+        mask_payload_len = 0x80 | fake_len
+
+        frame = struct.pack("!BB", fin_opcode, mask_payload_len) + masking_key + masked_payload
+
+        response = send_custom_frame(ws_url, frame)
+
+        return {
+            'name': 'Invalid Payload Length',
+            'risk': 'High',
+            'description': f"WebSocket at {ws_url} accepted frame with declared payload length 10 but sent only 4 bytes.",
+            'solution': 'Validate payload length matches actual data.',
+            'affected_url': ws_url,
+            'impact': 'Invalid lengths can cause buffer overflows or crashes.'
+        } if response else None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Invalid payload length test failed for {ws_url}: {e}", "yellow"))
+        return None
 
 def test_negative_payload_length(ws_url):
-    """Test negative payload length (Vuln #27)."""
-    frame = struct.pack("!B", 0x81) + struct.pack("!B", 0xFF) + b"test"
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Negative Payload Length',
-        'risk': 'High',
-        'description': f"WebSocket at {ws_url} accepted frame with invalid (large) payload length.",
-        'solution': 'Reject frames with invalid or negative payload lengths.',
-        'affected_url': ws_url,
-        'impact': 'Invalid lengths can lead to server crashes.'
-    } if response else None
+    """Test forged negative payload length (Vuln #27)."""
+    try:
+        payload = b"test"
+        masking_key = os.urandom(4)
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        fin_opcode = 0x81  # FIN=1, text
+        payload_len = 127  # 127 means: next 8 bytes is extended length (64-bit)
+
+        # Forge extended payload length: set MSB to simulate "negative" in signed logic
+        # Example: 0x8000000000000001
+        forged_len_bytes = struct.pack("!Q", 0x8000000000000001)
+
+        frame = (
+            struct.pack("!BB", fin_opcode, 0xFF) +  # 0xFF = 127
+            forged_len_bytes +
+            masking_key +
+            masked_payload
+        )
+
+        response = send_custom_frame(ws_url, frame)
+
+        return {
+            'name': 'Negative Payload Length',
+            'risk': 'High',
+            'description': f"WebSocket at {ws_url} accepted forged extended payload length (0x8000000000000001).",
+            'solution': 'Validate payload length fields and reject extreme or invalid values.',
+            'affected_url': ws_url,
+            'impact': 'Signed overflows in length handling can lead to crashes or memory corruption.'
+        } if response else None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Negative payload length test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_mismatched_payload(ws_url):
     """Test mismatched payload (Vuln #28)."""
-    frame = struct.pack("!B", 0x81) + struct.pack("!B", 0x04) + b"testtest"
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Mismatched Payload',
-        'risk': 'Medium',
-        'description': f"WebSocket at {ws_url} accepted frame with mismatched payload length.",
-        'solution': 'Ensure payload length matches actual data received.',
-        'affected_url': ws_url,
-        'impact': 'Mismatched payloads can cause parsing errors or exploits.'
-    } if response else None
+    try:
+        results = []
+
+        # 🧪 Test 1: Declared length = 4, sent 8 bytes
+        declared_len = 4
+        actual_payload = b"testtest"  # 8 bytes
+        masking_key_1 = os.urandom(4)
+        masked_payload_1 = bytes(b ^ masking_key_1[i % 4] for i, b in enumerate(actual_payload))
+        frame1 = (
+            struct.pack("!BB", 0x81, 0x80 | declared_len) +  # FIN=1, text; MASK=1
+            masking_key_1 +
+            masked_payload_1
+        )
+        response1 = send_custom_frame(ws_url, frame1)
+        
+        if response1:
+            return {
+                'name': 'Mismatched Payload',
+                'risk': 'Medium',
+                'description': f"WebSocket at {ws_url} accepted frames with mismatched lengths.",
+                'solution': 'Ensure payload lengths match.',
+                'affected_url': ws_url,
+                'impact': 'Can lead to parsing errors, decoder crashes, or type confusion.'
+            }
+
+        return None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Mismatched payload test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_invalid_masking_key(ws_url):
-    """Test invalid masking key (Vuln #29)."""
-    payload = b"test"
-    mask = b"\x00\x00\x00\x00"
-    masked_payload = bytes(p ^ mask[i % 4] for i, p in enumerate(payload))
-    frame = struct.pack("!B", 0x81) + struct.pack("!B", 0x84) + mask + masked_payload
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Invalid Masking Key',
-        'risk': 'High',
-        'description': f"WebSocket at {ws_url} accepted frame with invalid masking key.",
-        'solution': 'Validate masking key application for client frames.',
-        'affected_url': ws_url,
-        'impact': 'Invalid masking can lead to data corruption.'
-    } if response else None
+    """Test invalid masking key variations (Vuln #29)."""
+    try:
+        payload = b"test"
+        responses = []
+
+        test_keys = {
+            "All-zero": b"\x00\x00\x00\x00",
+            "Repeating FF": b"\xFF\xFF\xFF\xFF",
+            "Too short (3 bytes)": b"\x01\x02\x03",
+            "Too long (5 bytes)": b"\x01\x02\x03\x04\x05"
+        }
+
+        for label, key in test_keys.items():
+            # XOR masking — truncate or repeat key if needed
+            masked_payload = bytes(p ^ key[i % len(key)] for i, p in enumerate(payload))
+
+            fin_opcode = 0x81  # FIN=1, text frame
+            mask_payload_len = 0x80 | len(payload)  # MASK=1, length=4
+
+            frame = (
+                struct.pack("!BB", fin_opcode, mask_payload_len) +
+                key +
+                masked_payload
+            )
+
+            print(colored(f"[DEBUG] Sending frame with mask: {label}", "cyan"))
+            response = send_custom_frame(ws_url, frame)
+            responses.append((label, response))
+
+        for label, resp in responses:
+            if resp:
+                return {
+                    'name': 'Invalid Masking Key',
+                    'risk': 'High',
+                    'description': f"WebSocket at {ws_url} accepted a frame with invalid masking key pattern: {label}.",
+                    'solution': 'Enforce strict validation of client masking keys per RFC 6455.',
+                    'affected_url': ws_url,
+                    'impact': 'Improper masking validation may cause data integrity issues or security flaws.'
+                }
+
+        return None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Invalid masking key test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_unmasked_client_frame(ws_url):
     """Test unmasked client frame (Vuln #30)."""
-    frame = struct.pack("!B", 0x81) + struct.pack("!B", 0x04) + b"test"
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Unmasked Client Frame',
-        'risk': 'High',
-        'description': f"WebSocket at {ws_url} accepted unmasked client frame.",
-        'solution': 'Require masking for all client-to-server frames per RFC 6455.',
-        'affected_url': ws_url,
-        'impact': 'Unmasked frames can be intercepted by proxies.'
-    } if response else None
+    try:
+        payload = b"test"
+        fin_opcode = 0x81  # FIN=1, text frame
+        payload_len = len(payload)
+        mask_bit_off = payload_len  # MASK=0
+
+        frame = struct.pack("!BB", fin_opcode, mask_bit_off) + payload
+
+        response = send_custom_frame(ws_url, frame)
+
+        return {
+            'name': 'Unmasked Client Frame',
+            'risk': 'High',
+            'description': f"WebSocket at {ws_url} accepted an unmasked client frame.",
+            'solution': 'Require masking for all client-to-server frames per RFC 6455.',
+            'affected_url': ws_url,
+            'impact': 'Unmasked frames can be intercepted or misused in shared environments.'
+        } if response else None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Unmasked client frame test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_invalid_rsv_bits(ws_url):
     """Test invalid RSV bits (Vuln #31)."""
-    frame = struct.pack("!B", 0xC1) + struct.pack("!B", 0x04) + b"test"
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Invalid RSV Bits',
-        'risk': 'Medium',
-        'description': f"WebSocket at {ws_url} accepted frame with invalid RSV bits.",
-        'solution': 'Reject frames with non-zero RSV bits unless negotiated.',
-        'affected_url': ws_url,
-        'impact': 'Invalid RSV bits can cause protocol violations.'
-    } if response else None
+    try:
+        payload = b"test"
+        masked_payload = None
+        masking_key = os.urandom(4)
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        results = []
+
+        rsv_labels = {
+            "RSV1": 0x40,
+            "RSV2": 0x20,
+            "RSV3": 0x10
+        }
+
+        for label, bit in rsv_labels.items():
+            fin_opcode = 0x80 | bit | 0x1  # FIN=1, RSVx=1, Opcode=0x1 (text)
+            payload_len = 0x80 | len(payload)  # MASK=1 + 4 bytes
+
+            frame = (
+                struct.pack("!BB", fin_opcode, payload_len) +
+                masking_key +
+                masked_payload
+            )
+
+            print(colored(f"[DEBUG] Sending frame with {label} set", "cyan"))
+            response = send_custom_frame(ws_url, frame)
+            results.append((label, response))
+
+        for label, resp in results:
+            if resp:
+                return {
+                    'name': 'Invalid RSV Bits',
+                    'risk': 'Medium',
+                    'description': f"WebSocket at {ws_url} accepted a frame with invalid {label} bit set.",
+                    'solution': 'Reject non-zero RSV bits unless explicitly negotiated via extension.',
+                    'affected_url': ws_url,
+                    'impact': 'May trigger unintended behaviors, desyncs, or extension misinterpretation.'
+                }
+
+        return None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Invalid RSV bits test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_oversized_control_frame(ws_url):
     """Test oversized control frame (Vuln #32)."""
-    payload = b"A" * 126
-    frame = struct.pack("!B", 0x89) + struct.pack("!B", 0x7E) + struct.pack("!H", 126) + payload
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Oversized Control Frame',
-        'risk': 'Medium',
-        'description': f"WebSocket at {ws_url} accepted oversized control frame (126 bytes).",
-        'solution': 'Enforce 125-byte limit for control frames per RFC 6455.',
-        'affected_url': ws_url,
-        'impact': 'Oversized control frames can cause server crashes.'
-    } if response else None
+    try:
+        payload = b"A" * 126  # 1 byte over limit
+        masking_key = os.urandom(4)
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        fin_opcode = 0x89  # FIN=1, Opcode=0x9 (ping)
+        # Payload len = 126, so use extended 2-byte length + MASK=1
+        frame = (
+            struct.pack("!BBH", fin_opcode, 0xFE, 126) +  # 0xFE = MASK=1 + payload len=126
+            masking_key +
+            masked_payload
+        )
+
+        response = send_custom_frame(ws_url, frame)
+
+        return {
+            'name': 'Oversized Control Frame',
+            'risk': 'Medium',
+            'description': f"WebSocket at {ws_url} accepted a ping control frame with 126-byte payload.",
+            'solution': 'Reject control frames larger than 125 bytes as per RFC 6455.',
+            'affected_url': ws_url,
+            'impact': 'Oversized control frames can crash or desync the server.'
+        } if response else None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Oversized control frame test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_non_utf8_text(ws_url):
-    """Test non-UTF-8 text frame (Vuln #33)."""
-    frame = struct.pack("!B", 0x81) + struct.pack("!B", 0x02) + b"\xFF\xFF"
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Non-UTF-8 Text',
-        'risk': 'High',
-        'description': f"WebSocket at {ws_url} accepted non-UTF-8 Hztext frame.",
-        'solution': 'Validate text frames for UTF-8 encoding.',
-        'affected_url': ws_url,
-        'impact': 'Non-UTF-8 text can cause parsing errors or crashes.'
-    } if response else None
+    """Test non-UTF-8 payload in text frame (Vuln #33)."""
+    try:
+        invalid_utf8 = b"\xFF\xFF"  # clearly invalid UTF-8 sequence
+        masking_key = os.urandom(4)
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(invalid_utf8))
+
+        fin_opcode = 0x81  # FIN=1, Opcode=0x1 (text)
+        payload_len = 0x80 | len(invalid_utf8)  # MASK=1 + len=2
+
+        frame = (
+            struct.pack("!BB", fin_opcode, payload_len) +
+            masking_key +
+            masked_payload
+        )
+
+        response = send_custom_frame(ws_url, frame)
+
+        return {
+            'name': 'Non-UTF-8 Text',
+            'risk': 'High',
+            'description': f"WebSocket at {ws_url} accepted a text frame with invalid UTF-8 bytes.",
+            'solution': 'Ensure strict UTF-8 validation of text frames.',
+            'affected_url': ws_url,
+            'impact': 'Improper decoding may cause crashes, parser confusion, or security flaws.'
+        } if response else None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Non-UTF-8 text test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_null_bytes_in_text(ws_url):
     """Test null bytes in text frame (Vuln #34)."""
-    frame = struct.pack("!B", 0x81) + struct.pack("!B", 0x05) + b"te\x00st"
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Null Bytes in Text',
-        'risk': 'Medium',
-        'description': f"WebSocket at {ws_url} accepted text frame with null bytes.",
-        'solution': 'Reject text frames containing null bytes.',
-        'affected_url': ws_url,
-        'impact': 'Null bytes can lead to string termination issues.'
-    } if response else None
+    try:
+        payload = b"te\x00st"
+        masking_key = os.urandom(4)
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        fin_opcode = 0x81  # FIN=1, text frame
+        payload_len = 0x80 | len(payload)  # MASK=1 + length=5
+
+        frame = (
+            struct.pack("!BB", fin_opcode, payload_len) +
+            masking_key +
+            masked_payload
+        )
+
+        response = send_custom_frame(ws_url, frame)
+
+        return {
+            'name': 'Null Bytes in Text',
+            'risk': 'Medium',
+            'description': f"WebSocket at {ws_url} accepted a text frame containing null bytes.",
+            'solution': 'Validate and sanitize text frames for embedded nulls. Avoid C-style string truncation risks.',
+            'affected_url': ws_url,
+            'impact': 'Null bytes may cause truncation, spoofing, or parsing logic issues in downstream systems.'
+        } if response else None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Null byte test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_binary_as_text(ws_url):
-    """Test binary data as text frame (Vuln #35)."""
-    frame = struct.pack("!B", 0x81) + struct.pack("!B", 0x04) + b"\x00\xFF\x00\xFF"
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Binary as Text',
-        'risk': 'Low',
-        'description': f"WebSocket at {ws_url} accepted binary data in text frame.",
-        'solution': 'Validate text frames for valid UTF-8 content.',
-        'affected_url': ws_url,
-        'impact': 'Binary data in text frames can cause parsing errors.'
-    } if response else None
+    """Test binary data sent as a text frame (Vuln #35)."""
+    try:
+        payload = b"\x00\xFF\x00\xFF"  # Clearly not valid UTF-8
+        masking_key = os.urandom(4)
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        fin_opcode = 0x81  # FIN=1, Opcode=0x1 (text frame)
+        payload_len = 0x80 | len(payload)  # MASK=1 + len=4
+
+        frame = (
+            struct.pack("!BB", fin_opcode, payload_len) +
+            masking_key +
+            masked_payload
+        )
+
+        response = send_custom_frame(ws_url, frame)
+
+        return {
+            'name': 'Binary as Text',
+            'risk': 'Low',
+            'description': f"WebSocket at {ws_url} accepted a text frame with non-UTF-8 binary data.",
+            'solution': 'Validate UTF-8 compliance in all text frames as per RFC 6455.',
+            'affected_url': ws_url,
+            'impact': 'Binary data in text frames can crash UTF-8 decoders or lead to logic bugs in logging, auth, or sanitization layers.'
+        } if response else None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Binary-as-text test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_text_as_binary(ws_url):
-    """Test text data as binary frame (Vuln #36)."""
-    frame = struct.pack("!B", 0x82) + struct.pack("!B", 0x04) + b"text"
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Text as Binary',
-        'risk': 'Low',
-        'description': f"WebSocket at {ws_url} accepted text data in binary frame.",
-        'solution': 'Ensure binary frames are processed correctly.',
-        'affected_url': ws_url,
-        'impact': 'Incorrect frame type can cause application logic errors.'
-    } if response else None
+    """Test UTF-8 text sent as binary frame (Vuln #36)."""
+    try:
+        payload = b"text"  # Valid UTF-8 string
+        masking_key = os.urandom(4)
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        fin_opcode = 0x82  # FIN=1, Opcode=0x2 (binary)
+        payload_len = 0x80 | len(payload)  # MASK=1 + 4
+
+        frame = (
+            struct.pack("!BB", fin_opcode, payload_len) +
+            masking_key +
+            masked_payload
+        )
+
+        response = send_custom_frame(ws_url, frame)
+
+        return {
+            'name': 'Text as Binary',
+            'risk': 'Low',
+            'description': f"WebSocket at {ws_url} accepted UTF-8 text sent in a binary frame.",
+            'solution': 'Handle binary and text frames with separate logic as per RFC 6455.',
+            'affected_url': ws_url,
+            'impact': 'Frame type confusion may lead to parsing errors, logging bugs, or misrouted messages.'
+        } if response else None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Text-as-binary test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_invalid_close_code(ws_url):
-    """Test invalid close code (Vuln #37)."""
-    frame = struct.pack("!B", 0x88) + struct.pack("!B", 0x04) + struct.pack("!H", 999) + b"OK"
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Invalid Close Code',
-        'risk': 'Medium',
-        'description': f"WebSocket at {ws_url} accepted close frame with invalid code 999.",
-        'solution': 'Validate close codes per RFC 6455 (1000-4999).',
-        'affected_url': ws_url,
-        'impact': 'Invalid close codes can cause protocol errors.'
-    } if response else None
+    """Test invalid close code in close frame (Vuln #37)."""
+    try:
+        code = 999  # Not allowed by RFC 6455
+        reason = b"OK"
+        payload = struct.pack("!H", code) + reason
+
+        masking_key = os.urandom(4)
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        fin_opcode = 0x88  # FIN=1, Opcode=0x8 (close)
+        payload_len = 0x80 | len(payload)  # MASK=1 + len=4
+
+        frame = (
+            struct.pack("!BB", fin_opcode, payload_len) +
+            masking_key +
+            masked_payload
+        )
+
+        response = send_custom_frame(ws_url, frame)
+
+        return {
+            'name': 'Invalid Close Code',
+            'risk': 'Medium',
+            'description': f"WebSocket at {ws_url} accepted a close frame with invalid code 999.",
+            'solution': 'Close codes must conform to RFC 6455 (valid: 1000–1015, 3000–4999).',
+            'affected_url': ws_url,
+            'impact': 'Invalid codes may cause parser errors or incorrect shutdown logic.'
+        } if response else None
+
+    except Exception as e:
+        print(colored(f"[ERROR] Invalid close code test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_early_close_frame(ws_url):
-    """Test early close frame (Vuln #38)."""
+    """Test early close frame immediately after handshake (Vuln #38)."""
     try:
         ws = WebSocket()
         ws.connect(ws_url, timeout=5)
-        frame = struct.pack("!B", 0x88) + struct.pack("!B", 0x02) + struct.pack("!H", 1000)
-        ws.send_binary(frame)
-        response = ws.recv()
+
+        close_code = 1000  # Normal closure
+        payload = struct.pack("!H", close_code)
+
+        masking_key = os.urandom(4)
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        fin_opcode = 0x88  # FIN=1, Opcode=8 (close)
+        payload_len = 0x80 | len(payload)  # MASK=1 + length
+
+        frame = (
+            struct.pack("!BB", fin_opcode, payload_len) +
+            masking_key +
+            masked_payload
+        )
+
+        ws.send(frame)  # Send raw frame directly
+
+        try:
+            response = ws.recv()
+        except Exception:
+            response = None
+
         ws.close()
+
         return {
             'name': 'Early Close Frame',
             'risk': 'Low',
-            'description': f"WebSocket at {ws_url} accepted early close frame.",
-            'solution': 'Handle early close frames gracefully.',
+            'description': f"WebSocket at {ws_url} accepted an early close frame before any data was exchanged.",
+            'solution': 'Gracefully handle close frames sent immediately after handshake.',
             'affected_url': ws_url,
-            'impact': 'Early close frames can disrupt connection state.'
-        }
+            'impact': 'Unexpected early closes may cause resource leaks or state desyncs if not handled correctly.'
+        } if response else None
+
     except WebSocketException as e:
-        print(colored(f"Early close frame test failed for {ws_url}: {e}", "yellow"))
+        print(colored(f"[ERROR] Early close frame test failed for {ws_url}: {e}", "yellow"))
         return None
 
+
 def test_no_close_frame(ws_url):
-    """Test no close frame (Vuln #39)."""
+    """Test connection closed without sending a WebSocket close frame (Vuln #39)."""
     try:
-        ws = WebSocket()
-        ws.connect(ws_url, timeout=5)
-        ws.sock.close()
-        time.sleep(1)
-        ws = WebSocket()
-        ws.connect(ws_url, timeout=5)
-        ws.send("test")
-        response = ws.recv()
-        ws.close()
+        # Step 1: Connect and abruptly close
+        ws1 = WebSocket()
+        ws1.connect(ws_url, timeout=5)
+        try:
+            ws1.sock.close()  # Close TCP connection directly (no WebSocket close frame)
+        except Exception as e:
+            print(colored(f"[WARN] TCP close on ws1 may have failed silently: {e}", "yellow"))
+        time.sleep(2)
+
+        # Step 2: Reconnect and test if server is in a clean state
+        ws2 = WebSocket()
+        ws2.connect(ws_url, timeout=5)
+        ws2.send("test")  # normal masked text message
+        response = ws2.recv()
+        ws2.close()
+
         return {
             'name': 'No Close Frame',
             'risk': 'Low',
-            'description': f"WebSocket at {ws_url} handled abrupt closure without issues.",
-            'solution': 'Ensure server handles abrupt closures gracefully.',
+            'description': f"WebSocket at {ws_url} handled abrupt TCP closure and allowed clean reconnection.",
+            'solution': 'Ensure that server detects and cleans up on ungraceful disconnects.',
             'affected_url': ws_url,
-            'impact': 'Abrupt closures can leave server resources open.'
-        }
+            'impact': 'Abrupt closures (without a close frame) may leave sessions open or leak memory.'
+        } if response else None
+
     except WebSocketException as e:
-        print(colored(f"No close frame test failed for {ws_url}: {e}", "yellow"))
+        print(colored(f"[ERROR] No close frame test failed for {ws_url}: {e}", "yellow"))
         return None
 
 def test_long_close_reason(ws_url):
-    """Test long close reason (Vuln #40)."""
-    reason = "A" * 123
-    frame = struct.pack("!B", 0x88) + struct.pack("!B", len(reason) + 2) + struct.pack("!H", 1000) + reason.encode()
-    response = send_custom_frame(ws_url, frame)
-    return {
-        'name': 'Long Close Reason',
-        'risk': 'Medium',
-        'description': f"WebSocket at {ws_url} accepted close frame with long reason (123 bytes).",
-        'solution': 'Limit close reason length to prevent resource exhaustion.',
-        'affected_url': ws_url,
-        'impact': 'Long close reasons can cause server overload.'
-    } if response else None
+    """Test long close reason (max allowed by spec — 123 bytes) (Vuln #40)."""
+    try:
+        reason = "A" * 123  # Max allowed reason length
+        payload = struct.pack("!H", 1000) + reason.encode()  # 2-byte close code + reason
+
+        masking_key = os.urandom(4)
+        masked_payload = bytes(b ^ masking_key[i % 4] for i, b in enumerate(payload))
+
+        fin_opcode = 0x88  # FIN=1, Opcode=8 (close)
+        payload_len = 0x80 | len(payload)  # MASK=1 + payload length
+
+        frame = (
+            struct.pack("!BB", fin_opcode, payload_len) +
+            masking_key +
+            masked_payload
+        )
+
+        response = send_custom_frame(ws_url, frame)
+
+        return {
+            'name': 'Long Close Reason',
+            'risk': 'Medium',
+            'description': f"WebSocket at {ws_url} accepted close frame with long reason ({len(reason)} bytes).",
+            'solution': 'Enforce strict limits on close reason size (≤123 bytes).',
+            'affected_url': ws_url,
+            'impact': 'Overly long reasons may stress server logs, cause parsing failures, or lead to DoS.'
+        } if response else None
+
+    except WebSocketException as e:
+        print(colored(f"[ERROR] Long close reason test failed for {ws_url}: {e}", "yellow"))
+        return None
+
 
 def test_no_session_cookie(ws_url):
     """Test if WebSocket accepts connections without a session cookie (Vuln #41)."""
@@ -2263,6 +2635,13 @@ def test_url_path_traversal(ws_url):
         }
     except Exception as e:
         return None
+    
+def compact_url(url):
+    if "?" not in url:
+        return url
+    base = url.split("?", 1)[0]
+    num_params = url.count("&") + 1
+    return f"{base}?[{num_params} params]"
 
     
 def test_query_parameter_flood(ws_url):
@@ -2272,14 +2651,15 @@ def test_query_parameter_flood(ws_url):
         base = f"{parsed.scheme}://{parsed.netloc}{parsed.path}"
         params = "&".join([f"param{i}=value{i}" for i in range(1000)])
         flood_url = f"{base}?{params}"
+        compacted = compact_url(flood_url)
         ws = create_connection(flood_url, timeout=5)
         ws.close()
         return {
             'name': 'Query Parameter Flood',
             'risk': 'High',
-            'description': f"WebSocket endpoint {flood_url} accepts 1000 query parameters.",
+            'description': f"WebSocket endpoint {compacted} accepts 1000 query parameters.",
             'solution': 'Limit query parameters and implement strict validation.',
-            'affected_url': flood_url,
+            'affected_url': compacted,
             'impact': 'May cause resource exhaustion and DoS conditions.'
         }
     except Exception as e:
@@ -2476,100 +2856,111 @@ def perform_websocket_tests(websocket_urls, payloads):
         #         vulnerabilities.append(result)
         #         di1['Handshake'] += 1
 
-        # # 5️⃣ Payload Handling & Fragmentation Tests (Vuln #23-40)
-        # print("Starting Payload Handling & Fragmentation Tests")
+        # 5️⃣ Payload Handling & Fragmentation Tests (Vuln #23-40)
+        print("Starting Payload Handling & Fragmentation Tests")
 
-        # #it works but get rid of yellow error msg
-        # for test_func in payload_tests:
+        #it works but get rid of yellow error msg
+        for test_func in payload_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Payload'] += 1
+        
+        # # # 6️⃣ Authentication & Session Management Tests (Vuln #41-46)
+        # print("Starting Authentication & Session Management Tests")
+        
+        # for test_func in auth_session_tests:
         #     print(i)
         #     i+=1
         #     result = test_func(ws_url)
         #     if result:
         #         vulnerabilities.append(result)
-        #         di1['Payload'] += 1
+        #         di1['Session'] += 1
+
+        # # # 7️⃣ Subprotocol & Extension Tests (Vuln #47-51)
+        # print('Subprotocol & Extension Tests')
         
-        # # # 6️⃣ Authentication & Session Management Tests (Vuln #41-46)
-        print("Starting Authentication & Session Management Tests")
-        
-        for test_func in auth_session_tests:
-            print(i)
-            i+=1
-            result = test_func(ws_url)
-            if result:
-                vulnerabilities.append(result)
-                di1['Session'] += 1
+        # for test_func in subprotocol_tests:
+        #     print(i)
+        #     i+=1
+        #     result = test_func(host, port, path)
+        #     if result:
+        #         vulnerabilities.append(result)
+        #         di1['Subprotocol'] += 1    
+        # #it works ig but get rid of yellow error msg
 
-        # # 7️⃣ Subprotocol & Extension Tests (Vuln #47-51)
-        print('Subprotocol & Extension Tests')
-        
-        for test_func in subprotocol_tests:
-            print(i)
-            i+=1
-            result = test_func(host, port, path)
-            if result:
-                vulnerabilities.append(result)
-                di1['Subprotocol'] += 1    
-        #it works ig but get rid of yellow error msg
+        # for test_func in ws_subprotocol_tests:
+        #     print(i)
+        #     i+=1
+        #     result = test_func(ws_url)
+        #     if result:
+        #         vulnerabilities.append(result)
+        #         di1['Subprotocol'] += 1
 
-        for test_func in ws_subprotocol_tests:
-            print(i)
-            i+=1
-            result = test_func(ws_url)
-            if result:
-                vulnerabilities.append(result)
-                di1['Subprotocol'] += 1
+        # # # 8️⃣ Security & Encryption Tests (Vuln #52-56)
+        # print('Starting Security & Encryption Tests')
 
-        # # 8️⃣ Security & Encryption Tests (Vuln #52-56)
-        print('Starting Security & Encryption Tests')
+        # for test_func in security_tests:
+        #     print(i)
+        #     i+=1
+        #     result = test_func(host, port, path)
+        #     if result:
+        #         vulnerabilities.append(result)
+        #         di1['Security'] += 1
 
-        for test_func in security_tests:
-            print(i)
-            i+=1
-            result = test_func(host, port, path)
-            if result:
-                vulnerabilities.append(result)
-                di1['Security'] += 1
+        # # for test_func in ws_security_tests:
+        # #     print(i)
+        # #     i+=1
+        # #     result = test_func(ws_url)
+        # #     if result:
+        # #         vulnerabilities.append(result)
+        # #         di1['Security'] += 1
 
-        for test_func in ws_security_tests:
-            print(i)
-            i+=1
-            result = test_func(ws_url)
-            if result:
-                vulnerabilities.append(result)
-                di1['Security'] += 1
-
-        # # # 9️⃣ DoS & Resource Management Tests (Vuln #57-64)
-        print('Starting DoS & Resource Management Tests')
+        # # # # 9️⃣ DoS & Resource Management Tests (Vuln #57-64)
+        # # print('Starting DoS & Resource Management Tests')
                 
-        for test_func in ws_dos_tests:
-            print(i)
-            i+=1
-            result = test_func(ws_url)
-            if result:
-                vulnerabilities.append(result)
-                di1['DOS'] += 1
+        # for test_func in ws_dos_tests:
+        #     print(i)
+        #     i+=1
+        #     result = test_func(ws_url)
+        #     if result:
+        #         vulnerabilities.append(result)
+        #         di1['Security'] += 1
 
-        # # # 🔟 Cross-Origin & Mixed Content Tests (Vuln #65-69)
-        print("Starting Cross-Origin & Mixed Content Tests")
+        # # # # 9️⃣ DoS & Resource Management Tests (Vuln #57-64)
+        # # print('Starting DoS & Resource Management Tests')
+                
+        # # for test_func in ws_dos_tests:
+        # #     print(i)
+        # #     i+=1
+        # #     result = test_func(ws_url)
+        # #     if result:
+        # #         vulnerabilities.append(result)
+        # #         di1['DOS'] += 1
 
-        for test_func in cross_origin_tests:
-            print(i)
-            i+=1
-            result = test_func(ws_url)
-            if result:
-                vulnerabilities.append(result)
-                di1['Cross-Origin'] += 1
+        # # # # 🔟 Cross-Origin & Mixed Content Tests (Vuln #65-69)
+        # print("Starting Cross-Origin & Mixed Content Tests")
 
-        # 1️⃣1️⃣ Other Vulnerabilities Tests (Vuln #70-75)
-        print("Starting Other Vulnerabilities Tests")
+        # for test_func in cross_origin_tests:
+        #     print(i)
+        #     i+=1
+        #     result = test_func(ws_url)
+        #     if result:
+        #         vulnerabilities.append(result)
+        #         di1['Cross-Origin'] += 1
+
+        # #1️⃣1️⃣ Other Vulnerabilities Tests (Vuln #70-75)
+        # print("Starting Other Vulnerabilities Tests")
         
-        for test_func in ws_other_tests:
-            print(i)
-            i+=1
-            result = test_func(ws_url)
-            if result:
-                vulnerabilities.append(result)
-                di1['Others'] += 1
+        # for test_func in ws_other_tests:
+        #     print(i)
+        #     i+=1
+        #     result = test_func(ws_url)
+        #     if result:
+        #         vulnerabilities.append(result)
+        #         di1['Others'] += 1
 
         ws_report[ws_url] = vulnerabilities
     print("All tests completed.")
