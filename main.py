@@ -31,7 +31,19 @@ async def main():
         'urls_scanned': [],
         'total_vulnerabilities': {'High': 0, 'Medium': 0, 'Low': 0},
         'detailed_results': {},
-        'dict_total_errors':{}
+        'dict_total_errors':{
+            "Origin":0,
+            "Authentication":0,
+            "Fuzzing":0,
+            "Handshake":0,
+            "Payload":0,
+            "Session":0,
+            "Subprotocol":0,
+            "Security":0,
+            "DOS":0,
+            "Cross-Origin":0,
+            "Others":0
+        }
     }
 
     if input_method == "1":
@@ -169,8 +181,19 @@ async def main():
         for vuln in combined_results["detailed_results"]:
             pass
 
-    combined_results['urls_scanned'].append(target_urls)
+    combined_results['urls_scanned'].extend(target_urls)
     combined_results['total_scan_duration'] = time.time() - start_scan_time
+
+    for x,y in combined_results["detailed_results"].items():
+        print(x)
+        for m,n in y["vulnerabilities"].items():
+            print(m)
+            for o in n:
+                p = o['risk']
+                combined_results['total_vulnerabilities'][p]+=1
+        for q,r in y["dict_errors"].items():
+            combined_results["dict_total_errors"][q] += r
+
 
     # Print summary
     print(colored("\n=== Scan Summary ===", "green", attrs=['bold']))
@@ -180,19 +203,13 @@ async def main():
     print_aligned("High Severity:", combined_results['total_vulnerabilities']['High'])
     print_aligned("Medium Severity:", combined_results['total_vulnerabilities']['Medium'])
     print_aligned("Low Severity:", combined_results['total_vulnerabilities']['Low'])
-
-    # Generate report
-    # print(colored("\n[*] Generating PDF report...", "yellow"))
-    # try:
-    #     report_file = report_generator.generate_pdf_report(combined_results)
-    #     print(colored(f"[+] Report saved: {report_file}", "green"))
-    # except Exception as e:
-    #     print(colored(f"[-] Error generating report: {e}", "red"))
-    for x,y in combined_results["detailed_results"].items():
-        print(x)
-        for m,n in y["vulnerabilities"].items():
-            print(m)
-            for o in n:
-                print(o)
+    
+    #Generate report
+    print(colored("\n[*] Generating PDF report...", "yellow"))
+    try:
+        report_file = report_generator.generate_pdf_report(combined_results)
+        print(colored(f"[+] Report saved: {report_file}", "green"))
+    except Exception as e:
+        print(colored(f"[-] Error generating report: {e}", "red"))
 if __name__ == "__main__":
     asyncio.run(main())

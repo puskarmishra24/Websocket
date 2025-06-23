@@ -38,14 +38,14 @@ if os.getenv("PROXY_SERVER"):
 # Optional cookies for authenticated crawling
 COOKIES = []  # Example: [{"name": "session_cookie", "value": "your_cookie_value", "domain": "chatgpt.com", "path": "/"}]
 
-async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries: int = 3):
+async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries: int = 2):
     print(colored(f"Starting crawl for {target_url} with Playwright...", "blue"))
     crawled_urls = set()
     all_discovered_urls = set()  # Store all URLs encountered
     websocket_urls = set()
     to_crawl = {target_url}
-    max_requests = 3000  # Increased to capture more URLs
-    max_depth = 15  # Increased for deeper crawling
+    max_requests = 100  # Increased to capture more URLs
+    max_depth = 3  # Increased for deeper crawling
     current_depth = 0
     per_page_timeout = 60
 
