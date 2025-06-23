@@ -367,8 +367,6 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
     return {
         "num_crawls": len(crawled_urls),
         "crawled_urls": list(crawled_urls),
-        "num_discovered_urls": len(all_discovered_urls),
-        "all_discovered_urls": list(all_discovered_urls),
         "num_websockets": len(websocket_urls),
         "websocket_urls": list(websocket_urls),
         "crawl_notes": "No WebSocket endpoints found from crawling." if not websocket_urls else ""

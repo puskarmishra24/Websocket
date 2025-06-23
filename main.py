@@ -30,7 +30,7 @@ async def main():
         'total_scan_duration': 0,
         'urls_scanned': [],
         'total_vulnerabilities': {'High': 0, 'Medium': 0, 'Low': 0},
-        'detailed_results': [],
+        'detailed_results': {},
         'dict_total_errors':{}
     }
 
@@ -122,7 +122,6 @@ async def main():
             scan_duration = time.time() - start_time
 
             url_result = {
-            'url': target_url,
             'num_crawled_urls': crawl_data['num_crawls'],
             'crawled_urls': crawl_data['crawled_urls'],
             'num_websockets': len(crawl_data['websocket_urls']),
@@ -130,7 +129,7 @@ async def main():
             'crawl_notes': crawl_data.get('crawl_notes', ''),
             'scan_duration': scan_duration
             }
-            combined_results['detailed_results'].append(url_result)
+            combined_results['detailed_results'][target_url] = url_result
 
         except Exception as e:
             print(colored(f"[-] Error crawling {target_url}: {e}", "red"))
@@ -145,40 +144,32 @@ async def main():
     # Attack phase
     perform_attack = input(colored("\n[?] Perform WebSocket attack? (yes/no): ", "yellow")).strip().lower()
     if perform_attack == "yes":
-        if not all_ws:
-            print(colored("[-] No WebSocket endpoints to attack.", "red"))
-        else:
-            print(colored("[*] Starting WebSocket attack...", "yellow"))
-            try:
-                for key, val in di.items():
-                    vulnerabilities = []
-                    valid_ws = [ws for ws in val if attack.test_working_websocket(ws)]
-                    if valid_ws:
-                        attack_time = time.time()
-                        ws_report, ds = attack.attack_website(valid_ws)
-                        ind = target_urls.index(key)
-                        scan_duration = time.time() - attack_time
-                        combined_results["detailed_results"][ind]['vulnerabilities'] = vulnerabilities
-                        combined_results["detailed_results"][ind]['scan_duration'] += scan_duration
-                        combined_results["detailed_results"][ind]['dict_errors'] = ds
-                    else:
-                        print(colored("All WebSocket URLs failed the test. Skipping the website: " + key, "red"))
+        print(colored("[*] Starting WebSocket attack...", "yellow"))
+        try:
+            for key, val in di.items():
+                vulnerabilities = []
+                valid_ws = [ws for ws in val if attack.test_working_websocket(ws)]
+                if valid_ws:
+                    attack_time = time.time()
+                    ws_report, ds = attack.attack_website(valid_ws)
+                    scan_duration = time.time() - attack_time
+                    x = combined_results["detailed_results"][key]
+                    x['vulnerabilities'] = ws_report
+                    x['scan_duration'] += scan_duration
+                    x['dict_errors'] = ds
+                    print(colored(f"[+] Attack complete: {len(vulnerabilities)} vulnerabilities found", "green"))
 
-                print(colored(f"[+] Attack complete: {len(vulnerabilities)} vulnerabilities found", "green"))
+                else:
+                    print(colored("All WebSocket URLs failed the test. Skipping the website: " + key, "red"))
 
-            except Exception as e:
-                print(colored(f"[-] Error during attack: {e}", "red"))
-
-        # Compile results
-        
+        except Exception as e:
+            print(colored(f"[-] Error during attack: {e}", "red"))
+        print(colored(f"[+] Attack complete for all websites.", "green"))
         # Update vulnerability counts
         for vuln in combined_results["detailed_results"]:
-            for x in vuln:
-                risk = x.get('risk', 'Low')
-                combined_results['total_vulnerabilities'][risk] += 1
+            pass
 
-        combined_results['urls_scanned'].append(target_urls)
-        
+    combined_results['urls_scanned'].append(target_urls)
     combined_results['total_scan_duration'] = time.time() - start_scan_time
 
     # Print summary
@@ -197,8 +188,11 @@ async def main():
     #     print(colored(f"[+] Report saved: {report_file}", "green"))
     # except Exception as e:
     #     print(colored(f"[-] Error generating report: {e}", "red"))
-    print(ws_report)
-
-
+    for x,y in combined_results["detailed_results"].items():
+        print(x)
+        for m,n in y["vulnerabilities"].items():
+            print(m)
+            for o in n:
+                print(o)
 if __name__ == "__main__":
     asyncio.run(main())
