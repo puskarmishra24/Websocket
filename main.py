@@ -189,7 +189,7 @@ async def main():
         for m,n in y["vulnerabilities"].items():
             print(m)
             for o in n:
-                p = o['risk']
+                p = o.get("risk","Low")
                 combined_results['total_vulnerabilities'][p]+=1
         for q,r in y["dict_errors"].items():
             combined_results["dict_total_errors"][q] += r

@@ -41,10 +41,8 @@ def send_raw_handshake(host, port, request_headers, scheme="ws", timeout=10):
         s.settimeout(timeout)
 
         if scheme == "wss":
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
-            s = context.wrap_socket(s, server_hostname=host)
+            ssl_context = ssl.create_default_context()
+            s = ssl_context.wrap_socket(s, server_hostname=host)
 
         logging.info(f"Connecting to {host}:{port}...")
         s.connect((host, port))
@@ -1892,27 +1890,42 @@ def test_resource_leak(ws_url):
 
 def test_no_timeout_policy(ws_url):
     """Test if WebSocket server lacks a connection timeout policy (Vuln #64)."""
+    ws = None
     try:
         ws = WebSocket()
         ws.connect(ws_url, timeout=5)
-        time.sleep(120)  # Remain connected for 120 seconds
-        ws.send("test")
-        response = ws.recv()
-        ws.close()
-        return {
-            'name': 'No Timeout Policy',
-            'risk': 'High',
-            'description': f"WebSocket at {ws_url} lacks a connection timeout policy (active for 120 seconds).",
-            'solution': 'Implement a connection timeout policy to close long-lived connections.',
-            'affected_url': ws_url,
-            'impact': 'Lack of timeout policy can lead to resource exhaustion.'
-        }
+        time.sleep(120)  # Simulate idle period
+
+        try:
+            ws.send("test")  # Try to send data after being idle
+            response = ws.recv()
+            return {
+                'name': 'No Timeout Policy',
+                'risk': 'High',
+                'description': f"WebSocket at {ws_url} remained open and active after 120 seconds of idleness.",
+                'solution': 'Implement idle timeout to close inactive connections.',
+                'affected_url': ws_url,
+                'impact': 'Idle connections can consume server resources (threads, memory).'
+            }
+        except (WebSocketException, ssl.SSLError, socket.error) as e:
+            # Server closed connection = GOOD (has timeout)
+            print(colored(f"Idle timeout detected — server closed idle connection: {e}", "green"))
+            return {
+                'name': 'Idle Timeout Enforced',
+                'risk': 'None',
+                'description': f"WebSocket at {ws_url} correctly closed the connection after being idle.",
+                'solution': 'None — server behavior is secure.',
+                'affected_url': ws_url,
+                'impact': 'Server correctly enforces idle timeout.'
+            }
+
     except (WebSocketException, ssl.SSLError, socket.error) as e:
-        print(colored(f"No timeout policy test failed for {ws_url}: {e}", "yellow"))
+        print(colored(f"No timeout policy test failed to connect: {e}", "yellow"))
         return None
     finally:
         try:
-            ws.close()
+            if ws:
+                ws.close()
         except:
             pass
 
