@@ -1158,59 +1158,76 @@ def test_long_close_reason(ws_url):
 def test_no_session_cookie(ws_url):
     """Test if WebSocket accepts connections without a session cookie (Vuln #41)."""
     try:
-        ws = WebSocket()
-        ws.connect(ws_url, timeout=5)
+        # Omit the Cookie header completely
+        headers = [
+        "Origin: http://malicious.com" # Optional: simulate untrusted origin
+        ]
+        ws = create_connection(ws_url, header=headers, timeout=5)
         ws.send("test")
         response = ws.recv()
         ws.close()
         return {
-            'name': 'No Session Cookie',
-            'risk': 'High',
-            'description': f"WebSocket at {ws_url} accepts connections without a session cookie.",
-            'solution': 'Require valid session cookies for WebSocket connections.',
-            'affected_url': ws_url,
-            'impact': 'Unauthenticated users can access WebSocket sessions.'
+        'name': 'No Session Cookie',
+        'risk': 'High',
+        'description': f"WebSocket at {ws_url} accepts connections without a session cookie.",
+        'solution': 'Require valid session cookies (or tokens) to authenticate WebSocket clients.',
+        'affected_url': ws_url,
+        'impact': 'Unauthenticated users can establish WebSocket sessions, exposing sensitive data.'
         }
     except WebSocketException as e:
         print(colored(f"No session cookie test failed for {ws_url}: {e}", "yellow"))
+        return None
+    except Exception as e:
+        print(colored(f"Unexpected error during no session cookie test for {ws_url}: {e}", "yellow"))
         return None
 
 def test_expired_cookie(ws_url):
     """Test if WebSocket accepts connections with an expired session cookie (Vuln #42)."""
     try:
-        ws = WebSocket()
-        ws.connect(ws_url, cookie="session=expired_cookie_value; Max-Age=-1", timeout=5)
+        # Simulate expired cookie using Max-Age and Expires
+        headers = [
+        "Cookie: session=expired_cookie_value; Max-Age=-1",
+        "Origin: http://malicious.com" # Optional: simulates cross-origin if needed
+        ]
+        ws = create_connection(ws_url, header=headers, timeout=5)
         ws.send("test")
         response = ws.recv()
         ws.close()
         return {
-            'name': 'Expired Cookie',
-            'risk': 'Medium',
-            'description': f"WebSocket at {ws_url} accepts connections with an expired session cookie.",
-            'solution': 'Validate cookie expiration on the server side.',
-            'affected_url': ws_url,
-            'impact': 'Expired sessions can be exploited for unauthorized access.'
+        'name': 'Expired Cookie',
+        'risk': 'Medium',
+        'description': f"WebSocket at {ws_url} accepts connections with an expired session cookie.",
+        'solution': 'Validate cookie expiration on the server side and reject expired tokens.',
+        'affected_url': ws_url,
+        'impact': 'Expired sessions may be reused by attackers, leading to unauthorized access.'
         }
     except WebSocketException as e:
         print(colored(f"Expired cookie test failed for {ws_url}: {e}", "yellow"))
+        return None
+    except Exception as e:
+        print(colored(f"Unexpected error during expired cookie test for {ws_url}: {e}", "yellow"))
         return None
 
 def test_fake_token(ws_url):
     """Test if WebSocket accepts connections with a fake authentication token (Vuln #43)."""
     try:
-        ws = WebSocket()
-        ws.connect(ws_url, header=["Authorization: Bearer fake_token_123"], timeout=5)
+        headers = [
+            "Authorization: Bearer fake_token_123"
+        ]
+        ws = create_connection(ws_url, header=headers, timeout=5)
         ws.send("test")
         response = ws.recv()
         ws.close()
+
         return {
             'name': 'Fake Token',
             'risk': 'High',
             'description': f"WebSocket at {ws_url} accepts connections with a fake authentication token.",
-            'solution': 'Implement robust token validation (e.g., JWT verification).',
+            'solution': 'Implement robust token validation (e.g., JWT signature verification, token expiry check, audience validation).',
             'affected_url': ws_url,
-            'impact': 'Fake tokens can allow unauthorized access to WebSocket data.'
+            'impact': 'Fake tokens can lead to unauthorized access, impersonation, or escalation.'
         }
+
     except WebSocketException as e:
         print(colored(f"Fake token test failed for {ws_url}: {e}", "yellow"))
         return None
@@ -1218,27 +1235,38 @@ def test_fake_token(ws_url):
 def test_http_session_reuse(ws_url):
     """Test if HTTP session cookie is reused for WebSocket without revalidation (Vuln #44)."""
     try:
+        # 1. Derive equivalent HTTP URL
         parsed_url = urlparse(ws_url)
         http_url = f"{'https' if parsed_url.scheme == 'wss' else 'http'}://{parsed_url.netloc}/"
+
+        # 2. Start HTTP session and extract cookies
         session = requests.Session()
         response = session.get(http_url, timeout=5)
         cookies = session.cookies.get_dict()
         if not cookies:
+            print(colored(f"No cookies found on HTTP response from {http_url}.", "yellow"))
             return None
+
+        # 3. Convert cookies to WebSocket-compatible header
         cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
-        ws = WebSocket()
-        ws.connect(ws_url, cookie=cookie_str, timeout=5)
+        headers = [f"Cookie: {cookie_str}"]
+
+        # 4. Connect to WebSocket using same cookies
+        ws = create_connection(ws_url, header=headers, timeout=5)
         ws.send("test")
         response = ws.recv()
         ws.close()
+
+        # 5. Report success (session accepted)
         return {
             'name': 'HTTP Session Reuse',
             'risk': 'High',
-            'description': f"WebSocket at {ws_url} reuses HTTP session cookie without revalidation.",
-            'solution': 'Revalidate session cookies for WebSocket connections.',
+            'description': f"WebSocket at {ws_url} reused HTTP session cookie without revalidation.",
+            'solution': 'Require revalidation or token-based auth for WebSockets even if HTTP session exists.',
             'affected_url': ws_url,
-            'impact': 'Reused sessions can be exploited if HTTP session is compromised.'
+            'impact': 'Reused sessions may allow impersonation or privilege escalation if the HTTP session is hijacked.'
         }
+
     except (WebSocketException, requests.RequestException) as e:
         print(colored(f"HTTP session reuse test failed for {ws_url}: {e}", "yellow"))
         return None
@@ -1246,25 +1274,35 @@ def test_http_session_reuse(ws_url):
 def test_stale_session_reconnect(ws_url):
     """Test if WebSocket allows reconnection with a stale session (Vuln #45)."""
     try:
-        ws = WebSocket()
-        ws.connect(ws_url, cookie="session=stale_session_id_123", timeout=5)
-        ws.send("test")
-        response = ws.recv()
-        ws.close()
-        time.sleep(1)
-        ws = WebSocket()
-        ws.connect(ws_url, cookie="session=stale_session_id_123", timeout=5)
-        ws.send("test")
-        response = ws.recv()
-        ws.close()
+        stale_cookie = "session=stale_session_id_123"
+        headers = [
+            f"Cookie: {stale_cookie}"
+        ]
+
+        # First connection
+        ws1 = create_connection(ws_url, header=headers, timeout=5)
+        ws1.send("initial connection")
+        ws1.recv()
+        ws1.close()
+
+        # Simulate session aging
+        time.sleep(5)  # Not true expiration, but delay
+
+        # Second connection with same cookie
+        ws2 = create_connection(ws_url, header=headers, timeout=5)
+        ws2.send("reconnect with stale session")
+        response = ws2.recv()
+        ws2.close()
+
         return {
             'name': 'Stale Session Reconnect',
             'risk': 'High',
-            'description': f"WebSocket at {ws_url} allows reconnection with a stale session.",
-            'solution': 'Invalidate stale sessions and require fresh authentication.',
+            'description': f"WebSocket at {ws_url} allows reconnection with same stale session cookie.",
+            'solution': 'Invalidate old session IDs on WebSocket reconnect. Require fresh authentication or refresh token.',
             'affected_url': ws_url,
-            'impact': 'Stale sessions can be reused by attackers for unauthorized access.'
+            'impact': 'Attackers can reuse stolen or outdated session tokens for unauthorized access.'
         }
+
     except WebSocketException as e:
         print(colored(f"Stale session reconnect test failed for {ws_url}: {e}", "yellow"))
         return None
@@ -1272,126 +1310,148 @@ def test_stale_session_reconnect(ws_url):
 def test_cross_site_cookie_hijack(ws_url):
     """Test if WebSocket accepts cookies from a different origin (Vuln #46)."""
     try:
-        ws = WebSocket()
-        ws.connect(ws_url, cookie="session=cross_site_session; Domain=malicious.com", origin="http://malicious.com", timeout=5)
+        # Craft malicious headers
+        headers = [
+            "Origin: http://malicious.com",
+            "Cookie: session=cross_site_session; Domain=malicious.com"
+        ]
+
+        # Establish connection
+        ws = create_connection(ws_url, header=headers, timeout=5)
         ws.send("test")
         response = ws.recv()
         ws.close()
+
         return {
             'name': 'Cross-Site Cookie Hijack',
             'risk': 'High',
-            'description': f"WebSocket at {ws_url} accepts cookies from a different origin.",
-            'solution': 'Set SameSite=Strict on cookies and validate origin.',
+            'description': f"WebSocket at {ws_url} accepted cross-origin cookies and origin header.",
+            'solution': 'Set SameSite=Strict on cookies and validate the Origin header server-side.',
             'affected_url': ws_url,
-            'impact': 'Attackers can hijack sessions via cross-site requests.'
+            'impact': 'Attackers could hijack sessions via forged WebSocket connections from malicious origins.'
         }
+
     except WebSocketException as e:
         print(colored(f"Cross-site cookie hijack test failed for {ws_url}: {e}", "yellow"))
         return None
-
+    
 def test_invalid_subprotocol(ws_url):
     """Test if WebSocket accepts an invalid subprotocol (Vuln #47)."""
     try:
-        ws = WebSocket()
-        ws.connect(ws_url, subprotocols=["invalid..protocol"], timeout=5)
+        ws = create_connection(ws_url, subprotocols=["invalid..protocol"], timeout=5)
+        selected = ws.sock.selected_subprotocol
         ws.send("test")
-        response = ws.recv()
+        _ = ws.recv()
         ws.close()
-        return {
-            'name': 'Invalid Subprotocol',
-            'risk': 'Medium',
-            'description': f"WebSocket at {ws_url} accepts invalid subprotocol 'invalid..protocol'.",
-            'solution': 'Validate subprotocol names against a whitelist.',
-            'affected_url': ws_url,
-            'impact': 'Invalid subprotocols can lead to unexpected server behavior.'
-        }
+
+        if selected == "invalid..protocol":
+            return {
+                'name': 'Invalid Subprotocol',
+                'risk': 'Medium',
+                'description': f"WebSocket at {ws_url} negotiated invalid subprotocol: '{selected}'.",
+                'solution': 'Reject malformed or unsupported subprotocol values during handshake.',
+                'affected_url': ws_url,
+                'impact': 'Invalid subprotocols can lead to parser confusion, downgrade attacks, or misbehavior.'
+            }
+        else:
+            return None  # No vulnerability: server ignored the invalid subprotocol
+
     except WebSocketException as e:
         print(colored(f"Invalid subprotocol test failed for {ws_url}: {e}", "yellow"))
         return None
 
 def test_conflicting_subprotocols(ws_url):
-    """Test if WebSocket accepts conflicting subprotocols (Vuln #48)."""
+    """Test if WebSocket server accepts conflicting or duplicate subprotocols (Vuln #48)."""
     try:
-        ws = WebSocket()
-        ws.connect(ws_url, subprotocols=["protocol1,protocol2"], timeout=5)
+        # Pass multiple distinct subprotocols
+        ws = create_connection(ws_url, subprotocols=["chat", "stream", "chat"], timeout=5)
+        selected = ws.sock.selected_subprotocol
         ws.send("test")
-        response = ws.recv()
+        _ = ws.recv()
         ws.close()
-        return {
-            'name': 'Conflicting Subprotocols',
-            'risk': 'Medium',
-            'description': f"WebSocket at {ws_url} accepts conflicting subprotocols 'protocol1,protocol2'.",
-            'solution': 'Reject requests with multiple or malformed subprotocols.',
-            'affected_url': ws_url,
-            'impact': 'Conflicting subprotocols can cause protocol confusion.'
-        }
+
+        if selected == "chat, stream, chat" or selected == "chat,stream,chat":
+            return {
+                'name': 'Conflicting Subprotocols',
+                'risk': 'Medium',
+                'description': f"WebSocket at {ws_url} accepted conflicting subprotocols: {selected}.",
+                'solution': 'Ensure only one valid subprotocol is negotiated and reject duplicates.',
+                'affected_url': ws_url,
+                'impact': 'Conflicting subprotocols can cause logic confusion or downgrade vulnerabilities.'
+            }
+
+        return None  # No conflict detected if server negotiated cleanly
+
     except WebSocketException as e:
         print(colored(f"Conflicting subprotocols test failed for {ws_url}: {e}", "yellow"))
         return None
 
 def test_unaccepted_subprotocol(ws_url):
-    """Test if WebSocket accepts an unadvertised subprotocol (Vuln #49)."""
+    """Test if WebSocket server accepts an unadvertised subprotocol (Vuln #49)."""
     try:
-        ws = WebSocket()
-        ws.connect(ws_url, subprotocols=["unadvertised_protocol"], timeout=5)
+        ws = create_connection(ws_url, subprotocols=["unadvertised_protocol"], timeout=5)
+        negotiated = ws.sock.selected_subprotocol
         ws.send("test")
-        response = ws.recv()
+        _ = ws.recv()
         ws.close()
-        return {
-            'name': 'Unaccepted Subprotocol',
-            'risk': 'Medium',
-            'description': f"WebSocket at {ws_url} accepts unadvertised subprotocol 'unadvertised_protocol'.",
-            'solution': 'Only accept subprotocols advertised by the server.',
-            'affected_url': ws_url,
-            'impact': 'Unadvertised subprotocols can bypass protocol restrictions.'
-        }
+
+        if negotiated == "unadvertised_protocol":
+            return {
+                'name': 'Unaccepted Subprotocol',
+                'risk': 'Medium',
+                'description': f"WebSocket at {ws_url} negotiated unadvertised subprotocol 'unadvertised_protocol'.",
+                'solution': 'Only negotiate subprotocols explicitly supported by the server.',
+                'affected_url': ws_url,
+                'impact': 'Unadvertised subprotocols can allow unintended parsing or behavior (e.g., logic injection).'
+            }
+        else:
+            return None  # Server correctly ignored the bogus subprotocol
+
     except WebSocketException as e:
         print(colored(f"Unaccepted subprotocol test failed for {ws_url}: {e}", "yellow"))
         return None
 
-def test_fake_extension(host, port, path="/", conn=None):
+def test_fake_extension(host, port, path="/"):
     """Test if WebSocket accepts a fake extension (Vuln #50)."""
+    from base64 import b64encode
+    import socket
+    import ssl
+
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Extensions: fake-extension\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
-    if conn:
-        try:
-            conn.request("GET", path, headers={
-                "Host": host,
-                "Upgrade": "websocket",
-                "Connection": "Upgrade",
-                "Sec-WebSocket-Key": key,
-                "Sec-WebSocket-Extensions": "fake-extension",
-                "Sec-WebSocket-Version": "13"
-            })
-            response = conn.getresponse().read().decode()
+    request = (
+        f"GET {path} HTTP/1.1\r\n"
+        f"Host: {host}\r\n"
+        f"Upgrade: websocket\r\n"
+        f"Connection: Upgrade\r\n"
+        f"Sec-WebSocket-Key: {key}\r\n"
+        f"Sec-WebSocket-Version: 13\r\n"
+        f"Sec-WebSocket-Extensions: permessage-hackz; param=true\r\n"
+        f"\r\n"
+    )
+
+    try:
+        sock = socket.create_connection((host, port), timeout=5)
+        if port == 443:
+            context = ssl.create_default_context()
+            sock = context.wrap_socket(sock, server_hostname=host)
+
+        sock.sendall(request.encode())
+        response = sock.recv(4096).decode(errors="ignore")
+        sock.close()
+
+        if "101 Switching Protocols" in response:
             return {
                 'name': 'Fake Extension',
                 'risk': 'High',
-                'description': f"Server at {host}:{port} accepted fake extension 'fake-extension'.",
-                'solution': 'Validate Sec-WebSocket-Extensions against supported extensions.',
-                'affected_host': f"{host}:{port}",
-                'impact': 'Fake extensions can lead to unexpected server behavior.'
-            } if "101 Switching Protocols" in response else None
-        except Exception as e:
-            logging.info(f"Error in test_fake_extension for {host}:{port}: {e}")
-            return None
-    else:
-        response = send_raw_handshake(host, port, req)
-        return {
-            'name': 'Fake Extension',
-            'risk': 'High',
-            'description': f"Server at {host}:{port} accepted fake extension 'fake-extension'.",
-            'solution': 'Validate Sec-WebSocket-Extensions against supported extensions.',
-            'affected_host': f"{host}:{port}",
-            'impact': 'Fake extensions can lead to unexpected server behavior.'
-        } if "101 Switching Protocols" in response else None
+                'description': f"Server at {host}:{port} accepted spoofed extension.",
+                'solution': 'Validate Sec-WebSocket-Extensions header against supported values.',
+                'affected_host': f"{host}:{port}{path}",
+                'impact': 'Fake extensions can lead to parser confusion or misbehavior.'
+            }
+        return None
+    except Exception as e:
+        print(f"[!] Fake extension test failed for {host}:{port}: {e}")
+        return None
 
 def test_conflicting_extensions(host, port, path="/", conn=None):
     """Test if WebSocket accepts conflicting extensions (Vuln #51)."""
@@ -1437,89 +1497,83 @@ Sec-WebSocket-Version: 13\r\n
             'impact': 'Conflicting extensions can cause protocol errors.'
         } if "101 Switching Protocols" in response else None
 
-def test_spoofed_connection_header(host, port, path="/", conn=None):
+def test_spoofed_connection_header(host, port, path="/"):
     """Test if WebSocket accepts a spoofed Connection header (Vuln #52)."""
-    key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Keep-Alive\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
-    if conn:
-        try:
-            conn.request("GET", path, headers={
-                "Host": host,
-                "Upgrade": "websocket",
-                "Connection": "Keep-Alive",
-                "Sec-WebSocket-Key": key,
-                "Sec-WebSocket-Version": "13"
-            })
-            response = conn.getresponse().read().decode()
+    try:
+        key = b64encode(b"1234567890123456").decode()
+        request = (
+            f"GET {path} HTTP/1.1\r\n"
+            f"Host: {host}\r\n"
+            f"Upgrade: websocket\r\n"
+            f"Connection: keep-alive, Upgrade, evil\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            f"Sec-WebSocket-Version: 13\r\n"
+            f"\r\n"
+        )
+
+        sock = socket.create_connection((host, port), timeout=5)
+        if port == 443:
+            context = ssl.create_default_context()
+            sock = context.wrap_socket(sock, server_hostname=host)
+
+        sock.sendall(request.encode())
+        response = sock.recv(4096).decode(errors="ignore")
+        sock.close()
+
+        if "101 Switching Protocols" in response:
             return {
                 'name': 'Spoofed Connection Header',
                 'risk': 'High',
-                'description': f"Server at {host}:{port} accepted spoofed Connection header 'Keep-Alive'.",
-                'solution': 'Require Connection: Upgrade header for WebSocket handshake.',
-                'affected_host': f"{host}:{port}",
-                'impact': 'Spoofed headers can bypass handshake validation.'
-            } if "101 Switching Protocols" in response else None
-        except Exception as e:
-            logging.info(f"Error in test_spoofed_connection_header for {host}:{port}: {e}")
-            return None
-    else:
-        response = send_raw_handshake(host, port, req)
-        return {
-            'name': 'Spoofed Connection Header',
-            'risk': 'High',
-            'description': f"Server at {host}:{port} accepted spoofed Connection header 'Keep-Alive'.",
-            'solution': 'Require Connection: Upgrade header for WebSocket handshake.',
-            'affected_host': f"{host}:{port}",
-            'impact': 'Spoofed headers can bypass handshake validation.'
-        } if "101 Switching Protocols" in response else None
+                'description': f"Server at {host}:{port} accepted spoofed Connection header.",
+                'solution': 'Strictly validate Connection header to be exactly "Upgrade".',
+                'affected_host': f"{host}:{port}{path}",
+                'impact': 'Spoofed headers can bypass upgrade validation or confuse reverse proxies.'
+            }
 
-def test_http_1_0_downgrade(host, port, path="/", conn=None):
+        return None
+    except Exception as e:
+        print(colored(f"Spoofed Connection header test failed for {host}:{port}{path}: {e}", "yellow"))
+        return None
+
+def test_http_1_0_downgrade(host, port, path="/"):
     """Test if WebSocket accepts HTTP/1.0 handshake (Vuln #53)."""
-    key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.0\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
-    if conn:
-        try:
-            conn.request("GET", path, headers={
-                "Host": host,
-                "Upgrade": "websocket",
-                "Connection": "Upgrade",
-                "Sec-WebSocket-Key": key,
-                "Sec-WebSocket-Version": "13"
-            })
-            response = conn.getresponse().read().decode()
+    try:
+        key = b64encode(b"1234567890123456").decode()
+        request = (
+            f"GET {path} HTTP/1.0\r\n"
+            f"Host: {host}\r\n"
+            f"Upgrade: websocket\r\n"
+            f"Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Key: {key}\r\n"
+            f"Sec-WebSocket-Version: 13\r\n"
+            f"\r\n"
+        )
+
+        # Create socket connection
+        sock = socket.create_connection((host, port), timeout=5)
+        if port == 443:
+            context = ssl.create_default_context()
+            sock = context.wrap_socket(sock, server_hostname=host)
+
+        sock.sendall(request.encode())
+        response = sock.recv(4096).decode(errors="ignore")
+        sock.close()
+
+        if "101 Switching Protocols" in response:
             return {
                 'name': 'HTTP/1.0 Downgrade',
                 'risk': 'High',
-                'description': f"Server at {host}:{port} accepted HTTP/1.0 handshake.",
-                'solution': 'Require HTTP/1.1 or higher for WebSocket handshakes.',
-                'affected_host': f"{host}:{port}",
-                'impact': 'HTTP/1.0 lacks modern security features.'
-            } if "101 Switching Protocols" in response else None
-        except Exception as e:
-            logging.info(f"Error in test_http_1_0_downgrade for {host}:{port}: {e}")
-            return None
-    else:
-        response = send_raw_handshake(host, port, req)
-        return {
-            'name': 'HTTP/1.0 Downgrade',
-            'risk': 'High',
-            'description': f"Server at {host}:{port} accepted HTTP/1.0 handshake.",
-            'solution': 'Require HTTP/1.1 or higher for WebSocket handshakes.',
-            'affected_host': f"{host}:{port}",
-            'impact': 'HTTP/1.0 lacks modern security features.'
-        } if "101 Switching Protocols" in response else None
+                'description': f"Server at {host}:{port} accepted HTTP/1.0 WebSocket handshake.",
+                'solution': 'Only allow WebSocket upgrades over HTTP/1.1 or newer.',
+                'affected_host': f"{host}:{port}{path}",
+                'impact': 'Accepting HTTP/1.0 WebSocket handshakes can lead to protocol confusion and security issues.'
+            }
+
+        return None
+
+    except Exception as e:
+        print(colored(f"HTTP/1.0 downgrade test failed for {host}:{port}{path}: {e}", "yellow"))
+        return None
 
 def test_tls_downgrade(ws_url):
     """Test if WebSocket allows downgrade to insecure TLS versions (Vuln #54)."""
@@ -1560,48 +1614,55 @@ def test_tls_downgrade(ws_url):
         return None
     
 def test_insecure_cipher(ws_url):
-    """Test if WebSocket accepts insecure ciphers (Vuln #55)."""
+    """Test if WebSocket accepts insecure ciphers (Vuln #54: Weak TLS Ciphers)."""
     try:
         parsed_url = urlparse(ws_url)
         if parsed_url.scheme != 'wss':
-            return None  # Only applicable to wss:// URLs
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS)
+            return None  # Only applies to wss://
 
-        # List of insecure ciphers to test
-        insecure_ciphers = ["RC4-MD5", "DES-CBC-SHA"]
+        insecure_ciphers = [
+            "RC4-MD5",
+            "RC4-SHA",
+            "DES-CBC-SHA",
+            "EXP-RC4-MD5",
+            "EXP-DES-CBC-SHA",
+            "NULL-MD5"
+        ]
+
         supported_cipher = None
         for cipher in insecure_ciphers:
             try:
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
                 context.set_ciphers(cipher)
-                supported_cipher = cipher
-                break
-            except ssl.SSLError:
-                continue
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
 
-        if not supported_cipher:
-            print(colored(f"Insecure cipher test skipped for {ws_url}: No supported insecure ciphers available.", "yellow"))
+                ws = WebSocket(sslopt={"context": context})
+                ws.connect(ws_url, timeout=5)
+                ws.send("test")
+                _ = ws.recv()
+                ws.close()
+
+                supported_cipher = cipher
+                break  # Stop at first successful connection with a weak cipher
+
+            except (WebSocketException, ssl.SSLError, socket.error):
+                continue  # Try next cipher
+
+        if supported_cipher:
+            return {
+                'name': 'Insecure Cipher',
+                'risk': 'High',
+                'description': f"WebSocket at {ws_url} accepts insecure TLS cipher: {supported_cipher}.",
+                'solution': 'Disable weak ciphers like RC4, NULL, EXPORT, and DES-CBC-SHA. Use modern TLS ciphers only.',
+                'affected_url': ws_url,
+                'impact': 'Weak ciphers enable downgrade attacks and session compromise.'
+            }
+
+        else:
+            print(colored(f"Insecure cipher test passed (server rejected all weak ciphers) for {ws_url}", "green"))
             return None
 
-        context.verify_mode = ssl.CERT_NONE
-        ws = WebSocket(sslopt={"context": context})
-        ws.connect(ws_url, timeout=5)
-        ws.send("test")
-        response = ws.recv()
-        ws.close()
-        return {
-            'name': 'Insecure Cipher',
-            'risk': 'High',
-            'description': f"WebSocket at {ws_url} accepts insecure cipher {supported_cipher}.",
-            'solution': 'Disable insecure ciphers and use strong cipher suites.',
-            'affected_url': ws_url,
-            'impact': 'Insecure ciphers can be exploited to decrypt communications.'
-        }
-    except WebSocketException as e:
-        print(colored(f"Insecure cipher test failed for {ws_url}: {e}", "yellow"))
-        return None
-    except ssl.SSLError as e:
-        print(colored(f"Insecure cipher test failed for {ws_url}: {e}", "yellow"))
-        return None
     except Exception as e:
         print(colored(f"Insecure cipher test failed for {ws_url}: {e}", "yellow"))
         return None
@@ -2428,54 +2489,54 @@ def perform_websocket_tests(websocket_urls, payloads):
         #         di1['Payload'] += 1
         
         # # # 6️⃣ Authentication & Session Management Tests (Vuln #41-46)
-        # print("Starting Authentication & Session Management Tests")
+        print("Starting Authentication & Session Management Tests")
         
-        # for test_func in auth_session_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(ws_url)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Session'] += 1
+        for test_func in auth_session_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Session'] += 1
 
-        # # # 7️⃣ Subprotocol & Extension Tests (Vuln #47-51)
-        # print('Subprotocol & Extension Tests')
+        # # 7️⃣ Subprotocol & Extension Tests (Vuln #47-51)
+        print('Subprotocol & Extension Tests')
         
-        # for test_func in subprotocol_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(host, port, path)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Subprotocol'] += 1    
-        # #it works ig but get rid of yellow error msg
+        for test_func in subprotocol_tests:
+            print(i)
+            i+=1
+            result = test_func(host, port, path)
+            if result:
+                vulnerabilities.append(result)
+                di1['Subprotocol'] += 1    
+        #it works ig but get rid of yellow error msg
 
-        # for test_func in ws_subprotocol_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(ws_url)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Subprotocol'] += 1
+        for test_func in ws_subprotocol_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Subprotocol'] += 1
 
-        # # # 8️⃣ Security & Encryption Tests (Vuln #52-56)
-        # print('Starting Security & Encryption Tests')
+        # # 8️⃣ Security & Encryption Tests (Vuln #52-56)
+        print('Starting Security & Encryption Tests')
 
-        # for test_func in security_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(host, port, path)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Security'] += 1
+        for test_func in security_tests:
+            print(i)
+            i+=1
+            result = test_func(host, port, path)
+            if result:
+                vulnerabilities.append(result)
+                di1['Security'] += 1
 
-        # for test_func in ws_security_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(ws_url)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Security'] += 1
+        for test_func in ws_security_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Security'] += 1
 
         # # # 9️⃣ DoS & Resource Management Tests (Vuln #57-64)
         print('Starting DoS & Resource Management Tests')
@@ -2489,26 +2550,26 @@ def perform_websocket_tests(websocket_urls, payloads):
                 di1['DOS'] += 1
 
         # # # 🔟 Cross-Origin & Mixed Content Tests (Vuln #65-69)
-        # print("Starting Cross-Origin & Mixed Content Tests")
+        print("Starting Cross-Origin & Mixed Content Tests")
 
-        # for test_func in cross_origin_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(ws_url)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Cross-Origin'] += 1
+        for test_func in cross_origin_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Cross-Origin'] += 1
 
         # 1️⃣1️⃣ Other Vulnerabilities Tests (Vuln #70-75)
-        # print("Starting Other Vulnerabilities Tests")
+        print("Starting Other Vulnerabilities Tests")
         
-        # for test_func in ws_other_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(ws_url)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Others'] += 1
+        for test_func in ws_other_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Others'] += 1
 
         ws_report[ws_url] = vulnerabilities
     print("All tests completed.")
