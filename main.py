@@ -107,7 +107,7 @@ async def main():
                         ws_input = input(colored("Enter WebSocket URLs (comma-separated, e.g., wss://example.com/ws): ", "cyan")).strip()
                         if ws_input:
                             websocket_urls = [ws_url.strip() for ws_url in ws_input.split(',')]
-                            crawl_data['websocket_urls'].append(websocket_urls)
+                            crawl_data['websocket_urls'].extend(websocket_urls)
                             crawl_data['num_websockets'] = len(websocket_urls)
                             crawl_data['crawl_notes'] += "WebSocket URLs manually specified."
                         else:
@@ -184,7 +184,11 @@ async def main():
     combined_results['total_scan_duration'] = time.time() - start_scan_time
 
     for x,y in combined_results["detailed_results"].items():
+        if y['vulnerabilities'] is None:
+            continue
         for m,n in y["vulnerabilities"].items():
+            if n is None:
+                continue
             for o in n:
                 p = o.get("risk","Low")
                 combined_results['total_vulnerabilities'][p]+=1

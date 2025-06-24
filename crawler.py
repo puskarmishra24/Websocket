@@ -44,8 +44,8 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
     all_discovered_urls = set()  # Store all URLs encountered
     websocket_urls = set()
     to_crawl = {target_url}
-    max_requests = 300  # Increased to capture more URLs
-    max_depth = 5  # Increased for deeper crawling
+    max_requests = 100  # Increased to capture more URLs
+    max_depth = 1  # Increased for deeper crawling
     current_depth = 0
     per_page_timeout = 60
 
@@ -366,8 +366,8 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
 
     return {
         "num_crawls": len(crawled_urls),
-        "crawled_urls": list(crawled_urls),
+        "crawled_urls": list(crawled_urls)[:5],
         "num_websockets": len(websocket_urls),
-        "websocket_urls": list(websocket_urls),
+        "websocket_urls": list(websocket_urls)[:5],
         "crawl_notes": "No WebSocket endpoints found from crawling." if not websocket_urls else ""
     }
