@@ -84,6 +84,16 @@ def create_bar_chart(data, width=380, height=200, title="", categories=None, col
 
     return drawing
 
+def flatten_vuln_list(vuln_list):
+    """Flattens a list that may contain nested lists of vulnerability dicts."""
+    flat = []
+    for item in vuln_list:
+        if isinstance(item, dict):
+            flat.append(item)
+        elif isinstance(item, list):
+            flat.extend([v for v in item if isinstance(v, dict)])
+    return flat
+
 def generate_pdf_report(combined_results):
     """Generates a combined PDF report with charts for multiple URLs"""
     try:
@@ -338,7 +348,11 @@ def generate_pdf_report(combined_results):
             elements.append(Spacer(1, 15))
 
             # === URL Details Table ===
-            all_vulns = [v for vulns in url_result.get('vulnerabilities', {}).values() for v in vulns]
+            # Flatten all vulnerabilities across all websockets
+            all_vulns = []
+            for vuln_list in url_result.get('vulnerabilities', {}).values():
+                all_vulns.extend(flatten_vuln_list(vuln_list))
+
 
             url_details = [
                 ["Scan Duration:", f"{round(url_result.get('scan_duration', 0), 2)} seconds"],
@@ -439,7 +453,8 @@ def generate_pdf_report(combined_results):
                     elements.append(Paragraph(f"Affected WebSocket Endpoint: {ws_url}", styles['Heading3']))
                     elements.append(Spacer(1, 10))
 
-                    for vuln in vuln_list:
+                    flat_vulns = flatten_vuln_list(vuln_list)
+                    for vuln in flat_vulns:
                         risk = vuln.get('risk', 'Unknown')
                         bg_color = colors.mistyrose if risk == 'High' else \
                                 colors.lightgoldenrodyellow if risk == 'Medium' else \

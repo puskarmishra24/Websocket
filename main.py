@@ -183,16 +183,22 @@ async def main():
     combined_results['urls_scanned'].extend(target_urls)
     combined_results['total_scan_duration'] = time.time() - start_scan_time
 
-    for x,y in combined_results["detailed_results"].items():
+    for x, y in combined_results["detailed_results"].items():
         if y['vulnerabilities'] is None:
             continue
-        for m,n in y["vulnerabilities"].items():
+        for m, n in y["vulnerabilities"].items():
             if n is None:
                 continue
             for o in n:
-                p = o.get("risk","Low")
-                combined_results['total_vulnerabilities'][p]+=1
-        for q,r in y["dict_errors"].items():
+                if isinstance(o, dict):
+                    p = o.get("risk", "Low")
+                    combined_results['total_vulnerabilities'][p] += 1
+                elif isinstance(o, list):
+                    for item in o:
+                        if isinstance(item, dict):
+                            p = item.get("risk", "Low")
+                            combined_results['total_vulnerabilities'][p] += 1
+        for q, r in y["dict_errors"].items():
             combined_results["dict_total_errors"][q] += r
 
 

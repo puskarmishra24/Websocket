@@ -1070,8 +1070,6 @@ def test_negative_payload_length(ws_url):
 def test_mismatched_payload(ws_url):
     """Test mismatched payload (Vuln #28)."""
     try:
-        results = []
-
         # 🧪 Test 1: Declared length = 4, sent 8 bytes
         declared_len = 4
         actual_payload = b"testtest"  # 8 bytes
@@ -2749,14 +2747,14 @@ def perform_websocket_tests(websocket_urls, payloads):
         test_certificate_mismatch,  # 56
     ]
     ws_dos_tests = [
-        test_connection_flood,  # 57
-        test_oversized_message,  # 58
-        test_max_connections,  # 59
-        test_idle_timeout_abuse,  # 60
-        test_high_compression_ratio,  # 62
+        # test_connection_flood,  # 57
+        # test_oversized_message,  # 58
+        # test_max_connections,  # 59
+        # test_idle_timeout_abuse,  # 60
+        # test_high_compression_ratio,  # 62
         test_resource_leak,  # 63
-        test_no_compression_negotiation,  # 61
-        test_no_timeout_policy,  # 64
+        # test_no_compression_negotiation,  # 61
+        # test_no_timeout_policy,  # 64
     ]
     cross_origin_tests = [
         test_missing_cors_headers,  # 65
@@ -2781,7 +2779,7 @@ def perform_websocket_tests(websocket_urls, payloads):
         port = parsed_url.port or (443 if scheme == 'wss' else 80)
         path = parsed_url.path or "/"
         vulnerabilities = []
-        i=4
+        i=1
         # # 4️⃣ Handshake & HTTP Request Tests (Vuln #1-22)
         handshake_res = []
         if scheme not in ['ws', 'wss']:
@@ -2820,102 +2818,103 @@ def perform_websocket_tests(websocket_urls, payloads):
             logging.info(f"Invalid port for {ws_url}: {parsed_url.port}. Skipping this URL.")
             continue
             
-        # print("Starting primary checks: Origin Check, Authentication, Protocol Fuzzing")
-        # print(1)
-        # # # 1️⃣ Origin Check
-        # origin_result = test_origin_check(ws_url)
-        # if origin_result:
-        #     vulnerabilities.append(origin_result)
-        #     di1['Origin'] += 1
-        # print(2)
-        # # # 2️⃣ Authentication Check
-        # auth_result = test_authentication(ws_url)
-        # if auth_result:
-        #     vulnerabilities.append(auth_result)
-        #     di1['Authentication'] += 1
-        # print(3)
-        # # # 3️⃣ Protocol Fuzzing for each payload
-        # for payload in payloads:
-        #     fuzz_result = test_fuzzing(ws_url, payload)
-        #     if fuzz_result:
-        #         vulnerabilities.append(fuzz_result)
-        #         di1['Fuzzing'] += 1
+        print("Starting primary checks: Origin Check, Authentication, Protocol Fuzzing")
+        print(1)
+        # 1️⃣ Origin Check
+        origin_result = test_origin_check(ws_url)
+        if origin_result:
+            vulnerabilities.append(origin_result)
+            di1['Origin'] += 1
+        print(2)
+        # 2️⃣ Authentication Check
+        auth_result = test_authentication(ws_url)
+        if auth_result:
+            vulnerabilities.append(auth_result)
+            di1['Authentication'] += 1
+        print(3)
+        # 3️⃣ Protocol Fuzzing for each payload
+        for payload in payloads:
+            fuzz_result = test_fuzzing(ws_url, payload)
+            if fuzz_result:
+                vulnerabilities.append(fuzz_result)
+                di1['Fuzzing'] += 1
 
-        # print("Starting Handshake & HTTP Request Tests")
+        print("Starting Handshake & HTTP Request Tests")
         
-        # for test_func in handshake_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(host, port, path,scheme)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Handshake'] += 1
-        # print("21")
-        # print("22")
-        # # 5️⃣ Payload Handling & Fragmentation Tests (Vuln #23-40)
-        # print("Starting Payload Handling & Fragmentation Tests")
+        for test_func in handshake_tests:
+            print(i)
+            i+=1
+            result = test_func(host, port, path,scheme)
+            if result:
+                vulnerabilities.append(result)
+                di1['Handshake'] += 1
+        print(21)
+        print(22)
+        i+=2
+        # 5️⃣ Payload Handling & Fragmentation Tests (Vuln #23-40)
+        print("Starting Payload Handling & Fragmentation Tests")
 
-        # #it works but get rid of yellow error msg
-        # for test_func in payload_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(ws_url)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Payload'] += 1
+        #it works but get rid of yellow error msg
+        for test_func in payload_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Payload'] += 1
         
-        # # # # 6️⃣ Authentication & Session Management Tests (Vuln #41-46)
-        # print("Starting Authentication & Session Management Tests")
+        # 6️⃣ Authentication & Session Management Tests (Vuln #41-46)
+        print("Starting Authentication & Session Management Tests")
         
-        # for test_func in auth_session_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(ws_url)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Session'] += 1
+        for test_func in auth_session_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Session'] += 1
 
-        # # # # 7️⃣ Subprotocol & Extension Tests (Vuln #47-51)
-        # print('Subprotocol & Extension Tests')
+        # 7️⃣ Subprotocol & Extension Tests (Vuln #47-51)
+        print('Subprotocol & Extension Tests')
            
-        # # #it works ig but get rid of yellow error msg
+        # #it works ig but get rid of yellow error msg
 
-        # for test_func in ws_subprotocol_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(ws_url)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Subprotocol'] += 1
+        for test_func in ws_subprotocol_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Subprotocol'] += 1
 
-        # for test_func in subprotocol_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(host, port, path)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Subprotocol'] += 1 
+        for test_func in subprotocol_tests:
+            print(i)
+            i+=1
+            result = test_func(host, port, path)
+            if result:
+                vulnerabilities.append(result)
+                di1['Subprotocol'] += 1 
 
-        # # # 8️⃣ Security & Encryption Tests (Vuln #52-56)
-        # print('Starting Security & Encryption Tests')
+        # 8️⃣ Security & Encryption Tests (Vuln #52-56)
+        print('Starting Security & Encryption Tests')
 
-        # for test_func in security_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(host, port, path)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Security'] += 1
+        for test_func in security_tests:
+            print(i)
+            i+=1
+            result = test_func(host, port, path)
+            if result:
+                vulnerabilities.append(result)
+                di1['Security'] += 1
 
-        # for test_func in ws_security_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(ws_url)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Security'] += 1
+        for test_func in ws_security_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Security'] += 1
 
-        # # # # 9️⃣ DoS & Resource Management Tests (Vuln #57-64)
+        # 9️⃣ DoS & Resource Management Tests (Vuln #57-64)
         print('Starting DoS & Resource Management Tests')
                       
         for test_func in ws_dos_tests:
@@ -2926,27 +2925,27 @@ def perform_websocket_tests(websocket_urls, payloads):
                 vulnerabilities.append(result)
                 di1['DOS'] += 1
 
-        # # 🔟 Cross-Origin & Mixed Content Tests (Vuln #65-69)
-        # print("Starting Cross-Origin & Mixed Content Tests")
+        # 🔟 Cross-Origin & Mixed Content Tests (Vuln #65-69)
+        print("Starting Cross-Origin & Mixed Content Tests")
 
-        # for test_func in cross_origin_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(ws_url)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Cross-Origin'] += 1
+        for test_func in cross_origin_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Cross-Origin'] += 1
 
-        # # #1️⃣1️⃣ Other Vulnerabilities Tests (Vuln #70-75)
-        # print("Starting Other Vulnerabilities Tests")
+        #1️⃣1️⃣ Other Vulnerabilities Tests (Vuln #70-75)
+        print("Starting Other Vulnerabilities Tests")
         
-        # for test_func in ws_other_tests:
-        #     print(i)
-        #     i+=1
-        #     result = test_func(ws_url)
-        #     if result:
-        #         vulnerabilities.append(result)
-        #         di1['Others'] += 1
+        for test_func in ws_other_tests:
+            print(i)
+            i+=1
+            result = test_func(ws_url)
+            if result:
+                vulnerabilities.append(result)
+                di1['Others'] += 1
 
         ws_report[ws_url] = vulnerabilities
     print("All tests completed.")
