@@ -2747,14 +2747,14 @@ def perform_websocket_tests(websocket_urls, payloads):
         test_certificate_mismatch,  # 56
     ]
     ws_dos_tests = [
-        # test_connection_flood,  # 57
-        # test_oversized_message,  # 58
-        # test_max_connections,  # 59
-        # test_idle_timeout_abuse,  # 60
-        # test_high_compression_ratio,  # 62
+        test_connection_flood,  # 57
+        test_oversized_message,  # 58
+        test_max_connections,  # 59
+        test_idle_timeout_abuse,  # 60
+        test_high_compression_ratio,  # 62
         test_resource_leak,  # 63
-        # test_no_compression_negotiation,  # 61
-        # test_no_timeout_policy,  # 64
+        test_no_compression_negotiation,  # 61
+        test_no_timeout_policy,  # 64
     ]
     cross_origin_tests = [
         test_missing_cors_headers,  # 65

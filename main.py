@@ -8,6 +8,7 @@ import crawler
 import attack
 import report_generator
 import csv
+import pickle
 
 def print_aligned(label, value, label_width=25):
     """Print a label and value with aligned formatting."""
@@ -159,7 +160,7 @@ async def main():
         print(colored("[*] Starting WebSocket attack...", "yellow"))
         try:
             for key, val in di.items():
-                valid_ws = [ws for ws in val if attack.test_working_websocket(ws)][:3]
+                valid_ws = [ws for ws in val if attack.test_working_websocket(ws)]
                 if valid_ws:
                     attack_time = time.time()
                     ws_report, ds = attack.attack_website(valid_ws)
@@ -169,6 +170,7 @@ async def main():
                     x['scan_duration'] += scan_duration
                     x['dict_errors'] = ds
                     print(colored(f"[+] Attack complete.", "green"))
+                    print(valid_ws)
 
                 else:
                     print(colored("All WebSocket URLs failed the test. Skipping the website: " + key, "red"))
@@ -211,6 +213,9 @@ async def main():
     print_aligned("Medium Severity:", combined_results['total_vulnerabilities']['Medium'])
     print_aligned("Low Severity:", combined_results['total_vulnerabilities']['Low'])
     
+    with open("report.dat","wb") as f:
+        pickle.dump(combined_results)
+
     #Generate report
     print(colored("\n[*] Generating PDF report...", "yellow"))
     try:
