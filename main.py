@@ -160,35 +160,35 @@ async def main():
         print(colored("[*] Starting WebSocket attack...", "yellow"))
         try:
             for key, val in di.items():
-                valid_ws = [ws for ws in val if attack.test_working_websocket(ws)]
+                valid_ws = [ws for ws in val if attack.test_working_websocket(ws)][:5]
+                x = combined_results["detailed_results"][key]
                 if valid_ws:
                     attack_time = time.time()
                     ws_report, ds = attack.attack_website(valid_ws)
                     scan_duration = time.time() - attack_time
-                    x = combined_results["detailed_results"][key]
-                    x['vulnerabilities'] = ws_report
-                    x['scan_duration'] += scan_duration
-                    x['dict_errors'] = ds
                     print(colored(f"[+] Attack complete.", "green"))
-                    print(valid_ws)
 
                 else:
                     print(colored("All WebSocket URLs failed the test. Skipping the website: " + key, "red"))
+                    ws_report = None
+                    scan_duration = 0
+                    ds = {}
+                
+                x['vulnerabilities'] = ws_report
+                x['scan_duration'] += scan_duration
+                x['dict_errors'] = ds
 
         except Exception as e:
             print(colored(f"[-] Error during attack: {e}", "red"))
         print(colored(f"[+] Attack complete for all websites.", "green"))
-        # Update vulnerability counts
-        for vuln in combined_results["detailed_results"]:
-            pass
-
+        
     combined_results['urls_scanned'].extend(target_urls)
     combined_results['total_scan_duration'] = time.time() - start_scan_time
 
     for x, y in combined_results["detailed_results"].items():
         if y['vulnerabilities'] is None:
             continue
-        for m, n in y["vulnerabilities"].items():
+        for n in y["vulnerabilities"].values():
             if n is None:
                 continue
             for o in n:
