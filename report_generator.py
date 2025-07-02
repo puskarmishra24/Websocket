@@ -84,6 +84,63 @@ def create_bar_chart(data, width=380, height=200, title="", categories=None, col
 
     return drawing
 
+from reportlab.graphics.charts.textlabels import Label
+from reportlab.graphics.shapes import Rect, Drawing, String
+
+def create_heatmap(data_dict, title="Vulnerability Heatmap", width=500, height_per_row=20):
+    """
+    Create a horizontal heatmap based on website-wise vulnerability counts.
+    `data_dict` format: {site1: {"High": x, "Medium": y, "Low": z}, ...}
+    """
+    websites = list(data_dict.keys())
+    severities = ["High", "Medium", "Low"]
+    color_map = {"High": colors.red, "Medium": colors.orange, "Low": colors.green}
+
+    max_val = max([count for site in data_dict.values() for count in site.values()], default=1)
+    
+    cell_width = 40
+    cell_height = height_per_row
+    padding = 10
+    title_height = 20
+
+    total_width = padding * 4 + cell_width * len(severities) + 150  # space for labels
+    total_height = title_height + (cell_height + padding) * len(websites) + padding
+
+    drawing = Drawing(total_width, total_height)
+
+    # Title
+    drawing.add(String(total_width / 2, total_height - 15, title, fontSize=12, textAnchor='middle'))
+
+    # Column Headers
+    for idx, sev in enumerate(severities):
+        drawing.add(String(150 + idx * cell_width + padding, total_height - title_height - 5, sev, fontSize=8))
+
+    # Draw heatmap cells
+    for row_idx, site in enumerate(websites):
+        y = total_height - title_height - (row_idx + 1) * (cell_height + padding)
+
+        # Site name
+        drawing.add(String(5, y + 5, site[:25], fontSize=7))
+
+        for col_idx, sev in enumerate(severities):
+            count = data_dict[site].get(sev, 0)
+            intensity = min(1.0, count / max_val)
+            color = color_map[sev]
+
+            # Adjust color intensity
+            fill = colors.Color(
+                color.red * intensity,
+                color.green * intensity,
+                color.blue * intensity
+            )
+            x = 150 + col_idx * cell_width
+            drawing.add(Rect(x, y, cell_width - 2, cell_height, fillColor=fill, strokeColor=colors.black))
+
+            # Add count inside
+            drawing.add(String(x + cell_width / 2 - 2, y + 5, str(count), fontSize=6, textAnchor='middle'))
+
+    return drawing
+
 def flatten_vuln_list(vuln_list):
     """Flattens a list that may contain nested lists of vulnerability dicts."""
     flat = []
@@ -256,21 +313,37 @@ def generate_pdf_report(combined_results):
         elements.append(Spacer(1, 20))
 
 
-        # Vulnerability Distribution Chart
-        vuln_counts = [
-            combined_results.get('total_vulnerabilities', {}).get('High', 0),
-            combined_results.get('total_vulnerabilities', {}).get('Medium', 0),
-            combined_results.get('total_vulnerabilities', {}).get('Low', 0)
-        ]
+        # # Vulnerability Distribution Chart
+        # vuln_counts = [
+        #     combined_results.get('total_vulnerabilities', {}).get('High', 0),
+        #     combined_results.get('total_vulnerabilities', {}).get('Medium', 0),
+        #     combined_results.get('total_vulnerabilities', {}).get('Low', 0)
+        # ]
         
-        elements.append(create_bar_chart(
-            vuln_counts,
-            categories=['High', 'Medium', 'Low'],
-            colors_list=[colors.red, colors.orange, colors.green],
-            width=380,     # narrower width to fit within margins
-            height=180,    # optional, keeps consistent sizing
-            title="Vulnerability Distribution by Severity"
-        ))
+        # elements.append(create_bar_chart(
+        #     vuln_counts,
+        #     categories=['High', 'Medium', 'Low'],
+        #     colors_list=[colors.red, colors.orange, colors.green],
+        #     width=380,     # narrower width to fit within margins
+        #     height=180,    # optional, keeps consistent sizing
+        #     title="Vulnerability Distribution by Severity"
+        # ))
+# === Heatmap Section ===
+        elements.append(Paragraph("Vulnerability Heatmap by Website", heading2_style))
+        elements.append(Spacer(1, 10))
+
+# Build data for heatmap: {site: {"High": x, "Medium": y, "Low": z}, ...}
+        heatmap_data = {}
+        for url, details in combined_results.get("detailed_results", {}).items():
+            all_vulns = [v for vulns in details.get("vulnerabilities", {}).values() for v in vulns]
+            heatmap_data[url] = {
+                "High": sum(1 for v in all_vulns if v.get("risk") == "High"),
+                "Medium": sum(1 for v in all_vulns if v.get("risk") == "Medium"),
+                "Low": sum(1 for v in all_vulns if v.get("risk") == "Low")
+            }
+
+            elements.append(create_heatmap(heatmap_data, title="Heatmap of Vulnerabilities Across Websites"))
+            elements.append(Spacer(1, 30))
 
 
         # Vulnerability Summary by Type
