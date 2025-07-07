@@ -44,8 +44,8 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
     all_discovered_urls = set()  # Store all URLs encountered
     websocket_urls = set()
     to_crawl = {target_url}
-    max_requests = 100  # Increased to capture more URLs
-    max_depth = 1  # Increased for deeper crawling
+    max_requests = 2000  # Increased to capture more URLs
+    max_depth = 4  # Increased for deeper crawling
     current_depth = 0
     per_page_timeout = 60
 
@@ -156,7 +156,7 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
                     return
                 crawled_urls.add(normalized_url)
                 all_discovered_urls.add(url)
-                print(colored(f"Crawling (Depth {depth}): {url}", "blue"))
+                #print(colored(f"Crawling (Depth {depth}): {url}", "blue"))
 
                 page = await context.new_page()
                 network_urls = set()
@@ -354,15 +354,15 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
         print(colored("No WebSocket endpoints found.", "yellow"))
     else:
         print(colored(f"Found {len(websocket_urls)} WebSocket endpoints:", "green"))
-        for ws_url in websocket_urls:
-            print(colored(f"- {ws_url}", "green"))
+        # for ws_url in websocket_urls:
+        #     print(colored(f"- {ws_url}", "green"))
 
     if not all_discovered_urls:
         print(colored("No URLs discovered.", "yellow"))
     else:
         print(colored(f"Discovered {len(all_discovered_urls)} URLs (including non-crawled):", "green"))
-        for d_url in sorted(all_discovered_urls):
-            print(colored(f"- {d_url}", "green"))
+        # for d_url in sorted(all_discovered_urls):
+        #     print(colored(f"- {d_url}", "green"))
 
     return {
         "num_crawls": len(crawled_urls),

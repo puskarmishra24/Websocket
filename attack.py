@@ -17,6 +17,7 @@ import string
 import binascii
 import requests
 from hashlib import sha1
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -2336,14 +2337,7 @@ def test_no_timeout_policy(ws_url):
         except (WebSocketException, ssl.SSLError, socket.error) as e:
             # Server closed connection = GOOD (has timeout)
             print(colored(f"Idle timeout detected — server closed idle connection: {e}", "green"))
-            return {
-                'name': 'Idle Timeout Enforced',
-                'risk': 'None',
-                'description': f"WebSocket at {ws_url} correctly closed the connection after being idle.",
-                'solution': 'None — server behavior is secure.',
-                'affected_url': ws_url,
-                'impact': 'Server correctly enforces idle timeout.'
-            }
+            return None
 
     except (WebSocketException, ssl.SSLError, socket.error) as e:
         print(colored(f"No timeout policy test failed to connect: {e}", "yellow"))
@@ -2659,25 +2653,7 @@ def test_query_parameter_flood(ws_url):
         print(colored(f"Query parameter flood test failed for {ws_url}: {e}", "yellow"))
         return None
 
-    
-def perform_websocket_tests(websocket_urls, payloads):
-    """Perform WebSocket security tests."""
-    ws_report = {}
-    di1 = {
-        "Origin":0,
-        "Authentication":0,
-        "Fuzzing":0,
-        "Handshake":0,
-        "Payload":0,
-        "Session":0,
-        "Subprotocol":0,
-        "Security":0,
-        "DOS":0,
-        "Cross-Origin":0,
-        "Others":0
-    }
-
-    handshake_tests = [
+handshake_tests = [
         test_omit_sec_websocket_key,  # 1
         test_non_base64_sec_websocket_key,  # 2
         test_oversized_sec_websocket_key,  # 3
@@ -2699,79 +2675,95 @@ def perform_websocket_tests(websocket_urls, payloads):
         test_unicode_url,  # 19
         test_http_0_9_handshake,  # 20
     ]
-    #21 and 22 are used to check if URL is valid.
-    payload_tests = [
-        test_undefined_opcode,  # 23
-        test_reserved_opcode,  # 24
-        test_zero_length_fragment,  # 25
-        test_invalid_payload_length,  # 26
-        test_negative_payload_length,  # 27
-        test_mismatched_payload,  # 28
-        test_invalid_masking_key,  # 29
-        test_unmasked_client_frame,  # 30
-        test_invalid_rsv_bits,  # 31
-        test_oversized_control_frame,  # 32
-        test_non_utf8_text,  # 33
-        test_null_bytes_in_text,  # 34
-        test_binary_as_text,  # 35
-        test_text_as_binary,  # 36
-        test_invalid_close_code,  # 37
-        test_early_close_frame,  # 38
-        test_no_close_frame,  # 39
-        test_long_close_reason,  # 40
-    ]
-    auth_session_tests = [
-        test_no_session_cookie,  # 41
-        test_expired_cookie,  # 42
-        test_fake_token,  # 43
-        test_http_session_reuse,  # 44
-        test_stale_session_reconnect,  # 45
-        test_cross_site_cookie_hijack,  # 46
-    ]
-    ws_subprotocol_tests = [
-        test_invalid_subprotocol,  # 47
-        test_conflicting_subprotocols,  # 48
-        test_unaccepted_subprotocol,  # 49
-    ]
-    subprotocol_tests = [
-        test_fake_extension,  # 50
-        test_conflicting_extensions,  # 51
-    ]
-    security_tests = [
-        test_spoofed_connection_header,  # 52
-        test_http_1_0_downgrade,  # 53
-    ]
-    ws_security_tests = [
-        test_tls_downgrade,  # 54
-        test_insecure_cipher,  # 55
-        test_certificate_mismatch,  # 56
-    ]
-    ws_dos_tests = [
-        test_connection_flood,  # 57
-        test_oversized_message,  # 58
-        test_max_connections,  # 59
-        test_idle_timeout_abuse,  # 60
-        test_high_compression_ratio,  # 62
-        test_resource_leak,  # 63
-        test_no_compression_negotiation,  # 61
-        test_no_timeout_policy,  # 64
-    ]
-    cross_origin_tests = [
-        test_missing_cors_headers,  # 65
-        test_cross_origin_iframe,  # 66
-        test_mixed_content,  # 67
-        test_postmessage_abuse,  # 68
-        test_spoofed_url,  # 69
-    ]
-    ws_other_tests = [
-        test_error_message_leak,  # 70
-        test_server_disclosure,  # 71
-        test_invalid_content_type,  # 72
-        test_missing_security_headers,  # 73
-        test_url_path_traversal,  # 74
-        test_query_parameter_flood,  # 75
-    ]
-        
+#21 and 22 are used to check if URL is valid.
+payload_tests = [
+    test_undefined_opcode,  # 23
+    test_reserved_opcode,  # 24
+    test_zero_length_fragment,  # 25
+    test_invalid_payload_length,  # 26
+    test_negative_payload_length,  # 27
+    test_mismatched_payload,  # 28
+    test_invalid_masking_key,  # 29
+    test_unmasked_client_frame,  # 30
+    test_invalid_rsv_bits,  # 31
+    test_oversized_control_frame,  # 32
+    test_non_utf8_text,  # 33
+    test_null_bytes_in_text,  # 34
+    test_binary_as_text,  # 35
+    test_text_as_binary,  # 36
+    test_invalid_close_code,  # 37
+    test_early_close_frame,  # 38
+    test_no_close_frame,  # 39
+    test_long_close_reason,  # 40
+]
+auth_session_tests = [
+    test_no_session_cookie,  # 41
+    test_expired_cookie,  # 42
+    test_fake_token,  # 43
+    test_http_session_reuse,  # 44
+    test_stale_session_reconnect,  # 45
+    test_cross_site_cookie_hijack,  # 46
+]
+ws_subprotocol_tests = [
+    test_invalid_subprotocol,  # 47
+    test_conflicting_subprotocols,  # 48
+    test_unaccepted_subprotocol,  # 49
+]
+subprotocol_tests = [
+    test_fake_extension,  # 50
+    test_conflicting_extensions,  # 51
+]
+security_tests = [
+    test_spoofed_connection_header,  # 52
+    test_http_1_0_downgrade,  # 53
+]
+ws_security_tests = [
+    test_tls_downgrade,  # 54
+    test_insecure_cipher,  # 55
+    test_certificate_mismatch,  # 56
+]
+ws_dos_tests = [
+    test_connection_flood,  # 57
+    test_oversized_message,  # 58
+    test_max_connections,  # 59
+    test_idle_timeout_abuse,  # 60
+    test_high_compression_ratio,  # 62
+    test_resource_leak,  # 63
+    test_no_compression_negotiation,  # 61
+    test_no_timeout_policy,  # 64
+]
+cross_origin_tests = [
+    test_missing_cors_headers,  # 65
+    test_cross_origin_iframe,  # 66
+    test_mixed_content,  # 67
+    test_postmessage_abuse,  # 68
+    test_spoofed_url,  # 69
+]
+ws_other_tests = [
+    test_error_message_leak,  # 70
+    test_server_disclosure,  # 71
+    test_invalid_content_type,  # 72
+    test_missing_security_headers,  # 73
+    test_url_path_traversal,  # 74
+    test_query_parameter_flood,  # 75
+]
+
+def perform_websocket_tests(websocket_urls, payloads):
+    """Perform WebSocket security tests."""
+    ws_report = {}
+    di1 = {
+        "Origin":0,
+        "Authentication":0,
+        "Fuzzing":0,
+        "Handshake":0,
+        "Payload":0,
+        "Session":0,
+        "Subprotocol":0,
+        "Security":0,
+        "DOS":0,
+        "Cross-Origin":0,
+        "Others":0
+    }
     for ws_url in websocket_urls:
         parsed_url = urlparse(ws_url)
         host = parsed_url.hostname
@@ -2950,3 +2942,136 @@ def perform_websocket_tests(websocket_urls, payloads):
         ws_report[ws_url] = vulnerabilities
     print("All tests completed.")
     return ws_report, di1
+
+# def perform_websocket_tests(websocket_urls, payloads):
+#     """Perform WebSocket security tests concurrently, one thread per WebSocket."""
+#     ws_report = {}
+#     di1 = {
+#         "Origin": 0,
+#         "Authentication": 0,
+#         "Fuzzing": 0,
+#         "Handshake": 0,
+#         "Payload": 0,
+#         "Session": 0,
+#         "Subprotocol": 0,
+#         "Security": 0,
+#         "DOS": 0,
+#         "Cross-Origin": 0,
+#         "Others": 0
+#     }
+
+#     def test_one_websocket(ws_url, payloads):
+#         """Test a single WebSocket URL and return vulnerabilities and category counts."""
+#         parsed_url = urlparse(ws_url)
+#         host = parsed_url.hostname
+#         scheme = parsed_url.scheme
+#         port = parsed_url.port or (443 if scheme == 'wss' else 80)
+#         path = parsed_url.path or "/"
+#         vulnerabilities = []
+#         local_di = {k: 0 for k in di1.keys()}
+#         i = 1
+
+#         if scheme not in ['ws', 'wss']:
+#             print("Invalid scheme.")
+#             local_di['Handshake'] += 1
+#             return ws_url, [{
+#                 'name': 'Non-WebSocket Scheme',
+#                 'risk': 'High',
+#                 'description': f"WebSocket URL {ws_url} could be accessed with a non-WebSocket scheme 'http', which should be rejected by the server.",
+#                 'solution': 'Reject connections with non-WebSocket schemes (only allow ws:// or wss://).',
+#                 'affected_url': ws_url,
+#                 'impact': 'Non-WebSocket schemes can lead to protocol misuse if not handled properly.'
+#             }], local_di
+
+#         try:
+#             port = int(port)
+#             if not (0 <= port <= 65535):
+#                 print("Invalid port.")
+#                 local_di['Handshake'] += 1
+#                 return ws_url, [{
+#                     'name': 'Invalid Port',
+#                     'risk': 'Medium',
+#                     'description': f"WebSocket URL {parsed_url} contains an invalid port, which should be rejected by the server.",
+#                     'solution': 'Ensure server validates port numbers and rejects invalid ports.',
+#                     'affected_url': parsed_url,
+#                     'impact': 'Invalid ports can cause unexpected behavior if not handled.'
+#                 }], local_di
+#         except (TypeError, ValueError):
+#             print(f"Invalid port: {parsed_url.port}. Skipping this URL.")
+#             return ws_url, [], local_di
+
+#         # print("Running Origin Check")
+#         # res = test_origin_check(ws_url)
+#         # if res: vulnerabilities.append(res); local_di["Origin"] += 1
+
+#         # print("Running Authentication Check")
+#         # res = test_authentication(ws_url)
+#         # if res: vulnerabilities.append(res); local_di["Authentication"] += 1
+
+#         # print("Running Protocol Fuzzing")
+#         # for payload in payloads:
+#         #     res = test_fuzzing(ws_url, payload)
+#         #     if res: vulnerabilities.append(res); local_di["Fuzzing"] += 1
+
+#         print("Running Handshake & HTTP Request Tests")
+#         for test_func in handshake_tests:
+#             res = test_func(host, port, path, scheme)
+#             if res: vulnerabilities.append(res); local_di["Handshake"] += 1
+
+#         # print("Running Payload Handling & Fragmentation Tests")
+#         # for test_func in payload_tests:
+#         #     print(i); i += 1
+#         #     res = test_func(ws_url)
+#         #     if res: vulnerabilities.append(res); local_di["Payload"] += 1
+
+#         # print("Running Authentication & Session Management Tests")
+#         # for test_func in auth_session_tests:
+#         #     print(i); i += 1
+#         #     res = test_func(ws_url)
+#         #     if res: vulnerabilities.append(res); local_di["Session"] += 1
+
+#         # print("Running Subprotocol & Extension Tests")
+#         # for test_func in ws_subprotocol_tests + subprotocol_tests:
+#         #     print(i); i += 1
+#         #     res = test_func(ws_url if 'ws' in test_func.__name__ else host, port, path)
+#         #     if res: vulnerabilities.append(res); local_di["Subprotocol"] += 1
+
+#         # print("Running Security & Encryption Tests")
+#         # for test_func in security_tests + ws_security_tests:
+#         #     print(i); i += 1
+#         #     res = test_func(ws_url if 'ws' in test_func.__name__ else host, port, path)
+#         #     if res: vulnerabilities.append(res); local_di["Security"] += 1
+
+#         # print("Running DoS & Resource Management Tests")
+#         # for test_func in ws_dos_tests:
+#         #     print(i); i += 1
+#         #     res = test_func(ws_url)
+#         #     if res: vulnerabilities.append(res); local_di["DOS"] += 1
+
+#         # print("Running Cross-Origin & Mixed Content Tests")
+#         # for test_func in cross_origin_tests:
+#         #     print(i); i += 1
+#         #     res = test_func(ws_url)
+#         #     if res: vulnerabilities.append(res); local_di["Cross-Origin"] += 1
+
+#         # print("Running Other Vulnerability Tests")
+#         # for test_func in ws_other_tests:
+#         #     print(i); i += 1
+#         #     res = test_func(ws_url)
+#         #     if res: vulnerabilities.append(res); local_di["Others"] += 1
+
+#         print(f"[{ws_url}] All tests completed.")
+#         return ws_url, vulnerabilities, local_di
+#     # Run threads for each WebSocket URL
+#     with ThreadPoolExecutor(max_workers=3) as executor:
+#         futures = {executor.submit(test_one_websocket, ws, payloads): ws for ws in websocket_urls}
+#         for future in as_completed(futures):
+#             try:
+#                 ws_url, vulns, local_di = future.result()
+#                 ws_report[ws_url] = vulns
+#                 for k in di1:
+#                     di1[k] += local_di.get(k, 0)
+#             except Exception as e:
+#                 print(f"[!] Error testing {futures[future]}: {e}")
+
+#     return ws_report, di1

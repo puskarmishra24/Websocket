@@ -10,15 +10,18 @@ from reportlab.graphics.charts.barcharts import VerticalBarChart
 from datetime import datetime
 from textwrap import wrap
 import os
+from html import escape
 
 def create_wrapped_cell(text, width=60):
-    """Helper function to wrap text in table cells"""
+    """Helper function to wrap and escape text in table cells"""
     if text is None:
         text = ""
     if not isinstance(text, str):
         text = str(text)
+    text = escape(text)  # ⬅️ Add this line
     wrapped_text = "\n".join(wrap(text, width))
     return Paragraph(wrapped_text, ParagraphStyle('Normal'))
+
 
 def create_bar_chart(data, width=380, height=200, title="", categories=None, colors_list=None):
     """
@@ -87,7 +90,7 @@ def create_bar_chart(data, width=380, height=200, title="", categories=None, col
 from reportlab.graphics.charts.textlabels import Label
 from reportlab.graphics.shapes import Rect, Drawing, String
 
-def create_heatmap(data_dict, title="Vulnerability Heatmap", width=500, height_per_row=20):
+def create_heatmap(data_dict, width=500, height_per_row=20):
     """
     Create a horizontal heatmap based on website-wise vulnerability counts.
     `data_dict` format: {site1: {"High": x, "Medium": y, "Low": z}, ...}
@@ -108,9 +111,6 @@ def create_heatmap(data_dict, title="Vulnerability Heatmap", width=500, height_p
 
     drawing = Drawing(total_width, total_height)
 
-    # Title
-    drawing.add(String(total_width / 2, total_height - 15, title, fontSize=12, textAnchor='middle'))
-
     # Column Headers
     for idx, sev in enumerate(severities):
         drawing.add(String(150 + idx * cell_width + padding, total_height - title_height - 5, sev, fontSize=8))
@@ -124,7 +124,7 @@ def create_heatmap(data_dict, title="Vulnerability Heatmap", width=500, height_p
 
         for col_idx, sev in enumerate(severities):
             count = data_dict[site].get(sev, 0)
-            intensity = min(1.0, count / max_val)
+            intensity = min(1.0, count / max_val if max_val!=0 else 0)
             color = color_map[sev]
 
             # Adjust color intensity
@@ -137,7 +137,7 @@ def create_heatmap(data_dict, title="Vulnerability Heatmap", width=500, height_p
             drawing.add(Rect(x, y, cell_width - 2, cell_height, fillColor=fill, strokeColor=colors.black))
 
             # Add count inside
-            drawing.add(String(x + cell_width / 2 - 2, y + 5, str(count), fontSize=6, textAnchor='middle'))
+            drawing.add(String(x + (cell_width / 2) - 2, y + 5, str(count), fontSize=6, textAnchor='middle'))
 
     return drawing
 
@@ -269,7 +269,6 @@ def generate_pdf_report(combined_results):
         wrapped_summary_data = [[create_wrapped_cell(cell) for cell in row] for row in summary_data]
         summary_table = Table(wrapped_summary_data, colWidths=[2*inch, 4*inch])
         summary_table.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (0, -1), colors.lightyellow),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.lightyellow]),
             ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
@@ -307,7 +306,7 @@ def generate_pdf_report(combined_results):
             ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
             ('TOPPADDING', (0, 0), (-1, -1), 8),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.whitesmoke, colors.lightyellow]),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey)
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.black)
         ]))
         elements.append(urls_table)
         elements.append(Spacer(1, 20))
@@ -342,8 +341,8 @@ def generate_pdf_report(combined_results):
                 "Low": sum(1 for v in all_vulns if v.get("risk") == "Low")
             }
 
-            elements.append(create_heatmap(heatmap_data, title="Heatmap of Vulnerabilities Across Websites"))
-            elements.append(Spacer(1, 30))
+        elements.append(create_heatmap(heatmap_data))
+        elements.append(Spacer(1, 30))
 
 
         # Vulnerability Summary by Type
