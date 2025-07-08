@@ -19,7 +19,8 @@ def create_wrapped_cell(text, width=60):
     if not isinstance(text, str):
         text = str(text)
     text = escape(text)  # ⬅️ Add this line
-    wrapped_text = "\n".join(wrap(text, width))
+    wrapped_text = "\n".join(wrap(text, width=width, break_long_words=True, break_on_hyphens=False))
+
     return Paragraph(wrapped_text, ParagraphStyle('Normal'))
 
 
@@ -150,6 +151,65 @@ def flatten_vuln_list(vuln_list):
         elif isinstance(item, list):
             flat.extend([v for v in item if isinstance(v, dict)])
     return flat
+
+ATTACK_LIST = [f"Attack {i+1:02}" for i in range(75)]
+
+
+def create_detailed_heatmap(combined_results, cell_width=6, cell_height=10, padding=1):
+    """
+    Create a detailed heatmap showing WebSocket vs 75 attacks.
+    Colors: High=Red, Medium=Orange, Low=Yellow, Safe=Green, Not Run=Black.
+    """
+    attack_index = {name: idx for idx, name in enumerate(ATTACK_LIST)}
+    color_map = {"High": colors.red, "Medium": colors.orange, "Low": colors.yellow}
+    fallback_color = colors.green  # attack run, no vuln
+    missing_color = colors.black   # not run
+
+    ws_rows = []  # [(site → ws_url, {attack_name: risk})]
+
+    # Extract data per WebSocket
+    for site, details in combined_results.get("detailed_results", {}).items():
+        for ws_url, vuln_list in details.get("vulnerabilities", {}).items():
+            flat = flatten_vuln_list(vuln_list)
+            risk_map = {}
+            for v in flat:
+                name = v.get("name")
+                risk = v.get("risk")
+                if name and risk:
+                    risk_map[name] = risk
+            label = f"{site} → {ws_url}"
+            ws_rows.append((label, risk_map))
+
+    # Drawing dimensions
+    total_width = 150 + len(ATTACK_LIST) * (cell_width + padding) + padding
+    total_height = padding + len(ws_rows) * (cell_height + padding) + 50
+
+    drawing = Drawing(total_width, total_height)
+
+    # Column headers
+    for idx, name in enumerate(ATTACK_LIST):
+        x = 3 + idx * (5 + padding)
+        drawing.add(String(x, total_height-10, f"{idx+1}", fontSize=4, textAnchor="middle"))
+
+    # Heatmap rows
+    for row_idx, (label, risk_map) in enumerate(ws_rows):
+        y = total_height - (row_idx + 2) * (cell_height + padding)
+        drawing.add(String(5, y + 2, label[:60], fontSize=5))  # label truncated
+
+        for attack_name in ATTACK_LIST:
+            x = attack_index[attack_name] * (cell_width)
+            risk = risk_map.get(attack_name)
+
+            if risk in color_map:
+                fill = color_map[risk]
+            elif attack_name in risk_map:
+                fill = fallback_color
+            else:
+                fill = missing_color
+
+            drawing.add(Rect(x, y, cell_width, cell_height, fillColor=fill, strokeColor=colors.white))
+
+    return drawing
 
 def generate_pdf_report(combined_results):
     """Generates a combined PDF report with charts for multiple URLs"""
@@ -344,6 +404,11 @@ def generate_pdf_report(combined_results):
         elements.append(create_heatmap(heatmap_data))
         elements.append(Spacer(1, 30))
 
+        heatmap = create_detailed_heatmap(combined_results)
+        elements.append(Paragraph("WebSocket vs. Attack Heatmap", heading2_style))
+        elements.append(Spacer(1, 10))
+        elements.append(heatmap)
+        elements.append(Spacer(1, 30))
 
         # Vulnerability Summary by Type
         elements.append(Paragraph("Vulnerability Summary by Type", heading2_style))
@@ -471,26 +536,26 @@ def generate_pdf_report(combined_results):
             elements.append(ws_table)
             elements.append(Spacer(1, 30))
 
-            # === Crawled URLs Table ===
-            elements.append(Paragraph("Crawled URLs:", heading2_style))
-            elements.append(Spacer(1, 15))
+            # # === Crawled URLs Table ===
+            # elements.append(Paragraph("Crawled URLs:", heading2_style))
+            # elements.append(Spacer(1, 15))
 
-            crawled_urls_data = [["#", "URL"]]
-            for idx, crawled_url in enumerate(url_result.get('crawled_urls', []), 1):
-                crawled_urls_data.append([str(idx), crawled_url])
+    #         crawled_urls_data = [["#", "URL"]]
+    #         for idx, crawled_url in enumerate(url_result.get('crawled_urls', []), 1):
+    #             crawled_urls_data.append([str(idx), crawled_url])
 
-            wrapped_crawled_data = [[create_wrapped_cell(cell, width=40) for cell in row] for row in crawled_urls_data]
-            crawled_table = Table(wrapped_crawled_data, colWidths=[0.5*inch, 5.5*inch])
-            crawled_table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-    ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-    ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-    ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-    ('FONTSIZE', (0, 0), (-1, -1), 10),
-    ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-    ('TOPPADDING', (0, 0), (-1, -1), 12),
-    ('GRID', (0, 0), (-1, -1), 1, colors.black)]))  # keep same style
-            elements.append(crawled_table)
-            elements.append(Spacer(1, 30))
+    #         wrapped_crawled_data = [[create_wrapped_cell(cell, width=40) for cell in row] for row in crawled_urls_data]
+    #         crawled_table = Table(wrapped_crawled_data, colWidths=[0.5*inch, 5.5*inch])
+    #         crawled_table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
+    # ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
+    # ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+    # ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
+    # ('FONTSIZE', (0, 0), (-1, -1), 10),
+    # ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+    # ('TOPPADDING', (0, 0), (-1, -1), 12),
+    # ('GRID', (0, 0), (-1, -1), 1, colors.black)]))  # keep same style
+    #         elements.append(crawled_table)
+    #         elements.append(Spacer(1, 30))
 
             # === Vulnerabilities Chart for this URL ===
             url_vuln_counts = [
