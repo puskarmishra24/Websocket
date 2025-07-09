@@ -22,5 +22,5 @@ https://www.blockchain.com/en/,wss://ws.blockchain.info/inv
 https://docs.bitfinex.com/docs/introduction,wss://api-pub.bitfinex.com/ws/2
 https://www.bitstamp.net/,wss://ws.bitstamp.net
 https://docs.gemini.com/get-started/intro,wss://api.gemini.com/v1/marketdata/btcusd
-https://pro.coincap.io/api-docs,"wss://ws.coincap.io/prices?assets=bitcoin,ethereum"
+https://pro.coincap.io/api-docs,wss://ws.coincap.io/prices?assets=bitcoin,ethereum
 https://developers.binance.com/en,wss://stream.binance.com:9443/ws/btcusdt@trade

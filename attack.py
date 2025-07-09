@@ -79,71 +79,24 @@ def send_raw_handshake(host, port, request_headers, scheme="ws", timeout=10):
         except:
             pass
 
-def test_working_websocket(link,ws_report,di1):
-    """Test non-base64 Sec-WebSocket-Key header (Vuln #2)."""
-    
-    key = b64encode(b"1234567890123456").decode()
-    parsed_url = urlparse(link)
-    host = parsed_url.hostname
-    port = parsed_url.port or (443 if parsed_url.scheme == 'wss' else 80)
-    path = parsed_url.path or "/"
-    scheme = parsed_url.scheme
-
-    if scheme not in ['ws', 'wss']:
-        di1['Handshake'] += 1
-        ws_report[link] = {
-            'name': 'Non-WebSocket Scheme',
-            'risk': 'High',
-            'description': f"WebSocket URL {link} could be accessed with a non-WebSocket scheme 'http', which should be rejected by the server.",
-            'solution': 'Reject connections with non-WebSocket schemes (only allow ws:// or wss://).',
-            'affected_url': link,
-            'impact': 'Non-WebSocket schemes can lead to protocol misuse if not handled properly.'
-        }
-        return None
-
-    try:
-        port = int(port)
-        if not (0 <= port <= 65535):
-            di1['Handshake'] += 1
-            ws_report[link] = {
-                'name': 'Invalid Port',
-                'risk': 'Medium',
-                'description': f"WebSocket URL {parsed_url} contains an invalid port, which should be rejected by the server.",
-                'solution': 'Ensure server validates port numbers and rejects invalid ports.',
-                'affected_url': parsed_url,
-                'impact': 'Invalid ports can cause unexpected behavior if not handled.'
-            }
-            return None
-    except (TypeError, ValueError):
-        di1['Handshake'] += 1
-        ws_report[link] = {
-            'name': 'Invalid Port',
-            'risk': 'Medium',
-            'description': f"WebSocket URL {parsed_url} contains an invalid port, which should be rejected by the server.",
-            'solution': 'Ensure server validates port numbers and rejects invalid ports.',
-            'affected_url': parsed_url,
-            'impact': 'Invalid ports can cause unexpected behavior if not handled.'
-        }
-        return None
-    req = (
-    f"GET {path} HTTP/1.1\r\n"
-    f"Host: {host}\r\n"
-    "Upgrade: websocket\r\n"
-    "Connection: Upgrade\r\n"
-    f"Sec-WebSocket-Key: {key}\r\n"
-    "Sec-WebSocket-Version: 13\r\n"
-    "\r\n"
-)
-    try:
-        response = send_raw_handshake(host, port, req, scheme)
-        if response is None:
-            return None
-        if "101 Switching Protocols" in response:
-            return True
-        
-    except Exception as e:
-        logging.info(f"Error in test_non_base64_sec_websocket_key for {host}:{port}: {e}")
-        
+def test_working_websocket(url_list):
+    """Ensure invalid websockets are not being tested on."""
+    for idx, url in enumerate(url_list,0):
+        if "<" in url:
+            l = url.split('<')
+            a = l[0]
+            if a.startswith('wss://'):
+                b = a[6:]
+            elif a.startswith('ws://'):
+                b = a[5:]
+        print(b)
+        if b == '':
+            continue
+        elif 'example' in b:
+            continue
+        else:
+            url[idx] = b
+    url = list(set(url))
 def send_custom_frame(ws_url, frame_data):
     """Send a custom WebSocket frame (binary) and return the server's response."""
     try:
@@ -188,7 +141,7 @@ def test_origin_check(ws_url):
         }
     except WebSocketException as e:
         logging.info(f"Origin check test for {ws_url}: {e}")
-        #return {'name':'Missing Origin Check','risk':'No'}
+        return {'name':'Missing Origin Check','risk':'No'}
 
 def test_authentication(ws_url):
     """Test for missing or weak authentication."""
@@ -207,10 +160,10 @@ def test_authentication(ws_url):
                 'affected_url': ws_url,
                 'impact': 'Unauthorized access to sensitive data or functionality.'
             }
-        #return {'name':'Missing Authentication','risk':'No'}
+        return {'name':'Missing Authentication','risk':'No'}
     except WebSocketException as e:
         logging.info(f"Authentication test for {ws_url}: {e}")
-        #return {'name':'Missing Authentication','risk':'No'}
+        return {'name':'Missing Authentication','risk':'No'}
 
 def test_fuzzing(ws_url, payload):
     """Perform protocol fuzzing with payloads."""
@@ -230,6 +183,7 @@ def test_fuzzing(ws_url, payload):
                     'affected_url': ws_url,
                     'impact': 'Malformed messages may cause server errors or data leaks.'
                 }
+            return {'name':'Protocol Fuzzing Vulnerability','risk':'No'}
         except WebSocketException:
             ws.close()
             return {
@@ -242,10 +196,10 @@ def test_fuzzing(ws_url, payload):
             }
     except WebSocketException as e:
         logging.info(f"Fuzzing test for {ws_url}: {e}")
-        return None
+        return {'name':'Protocol Fuzzing Vulnerability','risk':'No'}
     
 def test_omit_sec_websocket_key(host, port, path="/", scheme="ws"):
-    """Test omitting Sec-WebSocket-Key header (Vuln #1)."""
+    """Test omitting Sec-WebSocket-Key header (Vuln #3)."""
     req = (
     f"GET {path} HTTP/1.1\r\n"
     f"Host: {host}\r\n"
@@ -257,7 +211,7 @@ def test_omit_sec_websocket_key(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Omit Sec-WebSocket-Key', 'risk': 'No'}
         return {
             'name': 'Omit Sec-WebSocket-Key',
             'risk': 'High',
@@ -265,10 +219,10 @@ def test_omit_sec_websocket_key(host, port, path="/", scheme="ws"):
             'solution': 'Require Sec-WebSocket-Key header for WebSocket handshake.',
             'affected_host': f"{host}:{port}",
             'impact': 'Bypassing handshake validation can allow unauthorized connections.'
-        } if response and "101 Switching Protocols" in response else None
+        } if response and "101 Switching Protocols" in response else {'name': 'Omit Sec-WebSocket-Key', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_omit_sec_websocket_key for {host}:{port}: {e}")
-        return None
+        return {'name': 'Omit Sec-WebSocket-Key', 'risk': 'No'}
     
 def test_non_base64_sec_websocket_key(host, port, path="/", scheme="ws"):
     """Test non-base64 Sec-WebSocket-Key header (Vuln #2)."""
@@ -285,7 +239,7 @@ def test_non_base64_sec_websocket_key(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme=scheme)
         if response is None:
-            return None
+            return {'name': 'Non-Base64 Sec-WebSocket-Key', 'risk': 'No'}
         return {
             'name': 'Non-Base64 Sec-WebSocket-Key',
             'risk': 'Medium',
@@ -293,10 +247,10 @@ def test_non_base64_sec_websocket_key(host, port, path="/", scheme="ws"):
             'solution': 'Validate Sec-WebSocket-Key as base64-encoded.',
             'affected_host': f"{host}:{port}",
             'impact': 'Improper key validation can lead to handshake vulnerabilities.'
-        } if response and "101 Switching Protocols" in response else None
+        } if response and "101 Switching Protocols" in response else {'name': 'Non-Base64 Sec-WebSocket-Key', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_non_base64_sec_websocket_key for {host}:{port}: {e}")
-        return None
+        return {'name': 'Non-Base64 Sec-WebSocket-Key', 'risk': 'No'}
     
 def test_oversized_sec_websocket_key(host, port, path="/", scheme="ws"):
     """Test oversized Sec-WebSocket-Key header (Vuln #3)."""
@@ -314,7 +268,7 @@ def test_oversized_sec_websocket_key(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Oversized Sec-WebSocket-Key', 'risk': 'No'}
         return {
             'name': 'Oversized Sec-WebSocket-Key',
             'risk': 'Medium',
@@ -322,22 +276,15 @@ def test_oversized_sec_websocket_key(host, port, path="/", scheme="ws"):
             'solution': 'Limit Sec-WebSocket-Key size to prevent resource exhaustion.',
             'affected_host': f"{host}:{port}",
             'impact': 'Large keys can cause server resource exhaustion.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Oversized Sec-WebSocket-Key', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_oversized_sec_websocket_key for {host}:{port}: {e}")
-        return None
+        return {'name': 'Oversized Sec-WebSocket-Key', 'risk': 'No'}
     
 def test_duplicate_sec_websocket_key(host, port, path="/", scheme="ws"):
     """Test duplicate Sec-WebSocket-Key headers (Vuln #4)."""
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: {host}\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Key: {key}duplicate\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
+    
     req = (
     f"GET {path} HTTP/1.1\r\n"
     f"Host: {host}\r\n"
@@ -352,7 +299,7 @@ Sec-WebSocket-Version: 13\r\n
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Duplicate Sec-WebSocket-Key', 'risk': 'No'}
         
         return {
             'name': 'Duplicate Sec-WebSocket-Key',
@@ -361,11 +308,11 @@ Sec-WebSocket-Version: 13\r\n
             'solution': 'Reject requests with multiple Sec-WebSocket-Key headers.',
             'affected_host': f"{host}:{port}",
             'impact': 'Duplicate headers can confuse handshake processing.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Duplicate Sec-WebSocket-Key', 'risk': 'No'}
     
     except Exception as e:
         logging.info(f"Error in test_duplicate_sec_websocket_key for {host}:{port}: {e}")
-        return None
+        return {'name': 'Duplicate Sec-WebSocket-Key', 'risk': 'No'}
    
 def test_missing_sec_websocket_version(host, port, path="/", scheme="ws"):
     """Test missing Sec-WebSocket-Version header (Vuln #5)."""
@@ -382,7 +329,7 @@ def test_missing_sec_websocket_version(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Missing Sec-WebSocket-Version', 'risk': 'No'}
         return {
             'name': 'Missing Sec-WebSocket-Version',
             'risk': 'High',
@@ -390,10 +337,10 @@ def test_missing_sec_websocket_version(host, port, path="/", scheme="ws"):
             'solution': 'Require Sec-WebSocket-Version header for WebSocket handshake.',
             'affected_host': f"{host}:{port}",
             'impact': 'Missing version header can allow incompatible connections.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Missing Sec-WebSocket-Version', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_missing_sec_websocket_version for {host}:{port}: {e}")
-        return None
+        return {'name': 'Missing Sec-WebSocket-Version', 'risk': 'No'}
     
 def test_invalid_sec_websocket_version(host, port, path="/", scheme="ws"):
     """Test invalid Sec-WebSocket-Version header (Vuln #6)."""
@@ -411,7 +358,7 @@ def test_invalid_sec_websocket_version(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Invalid Sec-WebSocket-Version', 'risk': 'No'}
         return {
             'name': 'Invalid Sec-WebSocket-Version',
             'risk': 'High',
@@ -419,10 +366,10 @@ def test_invalid_sec_websocket_version(host, port, path="/", scheme="ws"):
             'solution': 'Validate Sec-WebSocket-Version (e.g., 13) for WebSocket handshake.',
             'affected_host': f"{host}:{port}",
             'impact': 'Invalid versions can lead to protocol mismatches.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Invalid Sec-WebSocket-Version', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_invalid_sec_websocket_version for {host}:{port}: {e}")
-        return None
+        return {'name': 'Invalid Sec-WebSocket-Version', 'risk': 'No'}
     
 def test_conflicting_sec_websocket_version(host, port, path="/", scheme="ws"):
     """Test conflicting Sec-WebSocket-Version headers (Vuln #7)."""
@@ -441,7 +388,7 @@ def test_conflicting_sec_websocket_version(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Conflicting Sec-WebSocket-Version', 'risk': 'No'}
         return {
             'name': 'Conflicting Sec-WebSocket-Version',
             'risk': 'High',
@@ -449,10 +396,10 @@ def test_conflicting_sec_websocket_version(host, port, path="/", scheme="ws"):
             'solution': 'Reject requests with multiple Sec-WebSocket-Version headers.',
             'affected_host': f"{host}:{port}",
             'impact': 'Conflicting versions can cause protocol errors.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Conflicting Sec-WebSocket-Version', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_conflicting_sec_websocket_version for {host}:{port}: {e}")
-        return None
+        return {'name': 'Conflicting Sec-WebSocket-Version', 'risk': 'No'}
 
 def test_wrong_upgrade_header(host, port, path="/", scheme="ws"):
     """Test wrong Upgrade header (Vuln #8)."""
@@ -470,7 +417,7 @@ def test_wrong_upgrade_header(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Wrong Upgrade Header', 'risk': 'No'}
         return {
             'name': 'Wrong Upgrade Header',
             'risk': 'High',
@@ -478,10 +425,10 @@ def test_wrong_upgrade_header(host, port, path="/", scheme="ws"):
             'solution': 'Enforce strict Upgrade header validation.',
             'affected_host': f"{host}:{port}",
             'impact': 'Incorrect headers can bypass protocol validation.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Wrong Upgrade Header', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_wrong_upgrade_header for {host}:{port}: {e}")
-        return None
+        return {'name': 'Wrong Upgrade Header', 'risk': 'No'}
 
 def test_missing_connection_header(host, port, path="/", scheme="ws"):
     """Test missing Connection header (Vuln #9)."""
@@ -498,7 +445,7 @@ def test_missing_connection_header(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Missing Connection Header', 'risk': 'No'}
         return {
             'name': 'Missing Connection Header',
             'risk': 'High',
@@ -506,10 +453,10 @@ def test_missing_connection_header(host, port, path="/", scheme="ws"):
             'solution': 'Require Connection: Upgrade header for security.',
             'affected_host': f"{host}:{port}",
             'impact': 'Missing headers can allow improper connections.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Missing Connection Header', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_missing_connection_header for {host}:{port}: {e}")
-        return None
+        return {'name': 'Missing Connection Header', 'risk': 'No'}
 
 def test_case_sensitive_headers(host, port, path="/", scheme="ws"):
     """Test case-sensitive headers (Vuln #10)."""
@@ -533,7 +480,7 @@ Sec-WebSocket-Version: 13\r\n
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Case-Sensitive Headers', 'risk': 'No'}
         return {
             'name': 'Case-Sensitive Headers',
             'risk': 'Low',
@@ -541,10 +488,10 @@ Sec-WebSocket-Version: 13\r\n
             'solution': 'Ensure case-insensitive header parsing as per RFC.',
             'affected_host': f"{host}:{port}",
             'impact': 'Inconsistent header parsing can lead to security bypasses.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Case-Sensitive Headers', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_case_sensitive_headers for {host}:{port}: {e}")
-        return None
+        return {'name': 'Case-Sensitive Headers', 'risk': 'No'}
 
 def test_non_get_method(host, port, path="/", scheme="ws"):
     """Test non-GET method for handshake (Vuln #11)."""
@@ -562,7 +509,7 @@ def test_non_get_method(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Non-GET Method', 'risk': 'No'}
         return {
             'name': 'Non-GET Method',
             'risk': 'High',
@@ -570,13 +517,10 @@ def test_non_get_method(host, port, path="/", scheme="ws"):
             'solution': 'Restrict WebSocket handshakes to GET method.',
             'affected_host': f"{host}:{port}",
             'impact': 'Non-GET methods can bypass standard handshake validation.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Non-GET Method', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_non_get_method for {host}:{port}: {e}")
-        return None
-    
-from base64 import b64encode
-import logging
+        return {'name': 'Non-GET Method', 'risk': 'No'}
 
 def test_fake_http_status(host, port, path="/", scheme="ws"):
     """Test fake HTTP status code (Vuln #12)."""
@@ -596,7 +540,7 @@ def test_fake_http_status(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Fake HTTP Status', 'risk': 'No'}
 
         # Extract the first status line from the response
         status_line = response.split("\r\n", 1)[0].strip()
@@ -612,11 +556,11 @@ def test_fake_http_status(host, port, path="/", scheme="ws"):
             }
 
         # Server responded correctly — no issue
-        return None
+        return {'name': 'Fake HTTP Status', 'risk': 'No'}
 
     except Exception as e:
         logging.info(f"Error in test_fake_http_status for {host}:{port}: {e}")
-        return None
+        return {'name': 'Fake HTTP Status', 'risk': 'No'}
 
     
 def test_wrong_sec_websocket_accept(host, port, path="/", scheme="ws"):
@@ -636,7 +580,7 @@ def test_wrong_sec_websocket_accept(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Wrong Sec-WebSocket-Accept', 'risk': 'No'}
 
         # Parse response headers
         lines = response.split("\r\n")
@@ -669,11 +613,11 @@ def test_wrong_sec_websocket_accept(host, port, path="/", scheme="ws"):
             }
 
         # All good — no issue found
-        return None
+        return {'name': 'Wrong Sec-WebSocket-Accept', 'risk': 'No'}
 
     except Exception as e:
         logging.info(f"Error in test_wrong_sec_websocket_accept for {host}:{port}: {e}")
-        return None
+        return {'name': 'Wrong Sec-WebSocket-Accept', 'risk': 'No'}
 
     
 def test_oversized_headers(host, port, path="/", scheme="ws"):
@@ -694,7 +638,7 @@ def test_oversized_headers(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Oversized Headers', 'risk': 'No'}
         return {
             'name': 'Oversized Headers',
             'risk': 'Medium',
@@ -702,10 +646,10 @@ def test_oversized_headers(host, port, path="/", scheme="ws"):
             'solution': 'Set limits for header size to prevent resource exhaustion.',
             'affected_host': f"{host}:{port}",
             'impact': 'Oversized headers can cause denial-of-service attacks.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Oversized Headers', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_oversized_headers for {host}:{port}: {e}")
-        return None
+        return {'name': 'Oversized Headers', 'risk': 'No'}
     
 def test_missing_host_header(host, port, path="/", scheme="ws"):
     """Test missing Host header (Vuln #15)."""
@@ -721,7 +665,7 @@ def test_missing_host_header(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Missing Host Header', 'risk': 'No'}
         return {
             'name': 'Missing Host Header',
             'risk': 'High',
@@ -729,10 +673,10 @@ def test_missing_host_header(host, port, path="/", scheme="ws"):
             'solution': 'Enforce Host header validation.',
             'affected_host': f"{host}:{port}",
             'impact': 'Missing Host header can allow domain spoofing.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Missing Host Header', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_missing_host_header for {host}:{port}: {e}")
-        return None
+        return {'name': 'Missing Host Header', 'risk': 'No'}
 
 def test_fake_host_header(host, port, path="/", scheme="ws"):
     """Test fake Host header (Vuln #16)."""
@@ -749,7 +693,7 @@ def test_fake_host_header(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Fake Host Header', 'risk': 'No'}
         return {
             'name': 'Fake Host Header',
             'risk': 'High',
@@ -757,22 +701,14 @@ def test_fake_host_header(host, port, path="/", scheme="ws"):
             'solution': 'Validate Host header to match expected server domain.',
             'affected_host': f"{host}:{port}",
             'impact': 'Fake Host headers can enable domain spoofing attacks.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Fake Host Header', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_fake_host_header for {host}:{port}: {e}")
-        return None
+        return {'name': 'Fake Host Header', 'risk': 'No'}
 
 def test_multiple_host_headers(host, port, path="/", scheme="ws"):
     """Test multiple Host headers (Vuln #17)."""
     key = b64encode(b"1234567890123456").decode()
-    req = f"""GET {path} HTTP/1.1\r\n
-Host: real.example.com\r\n
-Host: fake.example.com\r\n
-Upgrade: websocket\r\n
-Connection: Upgrade\r\n
-Sec-WebSocket-Key: {key}\r\n
-Sec-WebSocket-Version: 13\r\n
-\r\n"""
     req = (
     f"GET {path} HTTP/1.1\r\n"
     f"Host: real.example.com\r\n"
@@ -786,7 +722,7 @@ Sec-WebSocket-Version: 13\r\n
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Multiple Host Headers', 'risk': 'No'}
         return {
             'name': 'Multiple Host Headers',
             'risk': 'High',
@@ -794,10 +730,10 @@ Sec-WebSocket-Version: 13\r\n
             'solution': 'Reject requests with duplicate Host headers.',
             'affected_host': f"{host}:{port}",
             'impact': 'Multiple Host headers can confuse server routing.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Multiple Host Headers', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_multiple_host_headers for {host}:{port}: {e}")
-        return None
+        return {'name': 'Multiple Host Headers', 'risk': 'No'}
 
 def test_long_url_path(host, port, path="/", scheme="ws"):
     """Test long URL path (Vuln #18)."""
@@ -816,7 +752,7 @@ def test_long_url_path(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Long URL Path', 'risk': 'No'}
         return {
             'name': 'Long URL Path',
             'risk': 'Low',
@@ -824,10 +760,10 @@ def test_long_url_path(host, port, path="/", scheme="ws"):
             'solution': 'Limit URL path length to prevent resource exhaustion.',
             'affected_host': f"{host}:{port}",
             'impact': 'Long URLs can cause server overload or crashes.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Long URL Path', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_long_url_path for {host}:{port}: {e}")
-        return None
+        return {'name': 'Long URL Path', 'risk': 'No'}
 
 def test_unicode_url(host, port, path="/", scheme="ws"):
     """Test Unicode URL (Vuln #19)."""
@@ -846,7 +782,7 @@ def test_unicode_url(host, port, path="/", scheme="ws"):
     try:
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'Unicode URL', 'risk': 'No'}
         return {
             'name': 'Unicode URL',
             'risk': 'Medium',
@@ -854,10 +790,10 @@ def test_unicode_url(host, port, path="/", scheme="ws"):
             'solution': 'Sanitize and validate URL paths to handle Unicode correctly.',
             'affected_host': f"{host}:{port}",
             'impact': 'Improper Unicode handling can lead to parsing errors or bypasses.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'Unicode URL', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_unicode_url for {host}:{port}: {e}")
-        return None
+        return {'name': 'Unicode URL', 'risk': 'No'}
 
 def test_http_0_9_handshake(host, port, path="/", scheme="ws"):
     """Test HTTP/0.9 handshake (Vuln #20)."""
@@ -866,7 +802,7 @@ def test_http_0_9_handshake(host, port, path="/", scheme="ws"):
         # HTTP/0.9 doesn't use headers
         response = send_raw_handshake(host, port, req, scheme)
         if response is None:
-            return None
+            return {'name': 'HTTP/0.9 Handshake', 'risk': 'No'}
         return {
             'name': 'HTTP/0.9 Handshake',
             'risk': 'High',
@@ -874,46 +810,35 @@ def test_http_0_9_handshake(host, port, path="/", scheme="ws"):
             'solution': 'Require HTTP/1.1 or higher for WebSocket handshakes.',
             'affected_host': f"{host}:{port}",
             'impact': 'HTTP/0.9 lacks headers, enabling downgrade attacks.'
-        } if "101 Switching Protocols" in response else None
+        } if "101 Switching Protocols" in response else {'name': 'HTTP/0.9 Handshake', 'risk': 'No'}
     except Exception as e:
         logging.info(f"Error in test_http_0_9_handshake for {host}:{port}: {e}")
-        return None
+        return {'name': 'HTTP/0.9 Handshake', 'risk': 'No'}
     
 
 def test_invalid_port(ws_url):
-    """Test if WebSocket accepts connections on invalid ports (Vuln #21)."""
+    """Test if WebSocket properly rejects connections on invalid ports (Vuln #21)."""
     try:
         parsed_url = urlparse(ws_url)
         invalid_port_url = f"{parsed_url.scheme}://{parsed_url.hostname}:99999{parsed_url.path}"
-        parsed_invalid_url = urlparse(invalid_port_url)
-        port = parsed_invalid_url.port
-        # Check if the port is invalid; if so, report without attempting connection
-        if port is None or not (0 <= port <= 65535):
-            return {
-                'name': 'Invalid Port',
-                'risk': 'Medium',
-                'description': f"WebSocket URL {invalid_port_url} contains an invalid port 99999, which should be rejected by the server.",
-                'solution': 'Ensure server validates port numbers and rejects invalid ones.',
-                'affected_url': invalid_port_url,
-                'impact': 'Invalid ports can cause unexpected behavior if not handled.'
-            }
-        # If the port is valid, attempt the connection (though this shouldn't happen with 99999)
+
+        # Attempt to connect to an invalid port — this should raise an error
         ws = WebSocket()
         ws.connect(invalid_port_url, timeout=5)
         ws.close()
+
+        # If it connects successfully, that's suspicious
         return {
             'name': 'Invalid Port',
             'risk': 'Medium',
-            'description': f"WebSocket at {invalid_port_url} accepted connection on invalid port 99999.",
-            'solution': 'Validate port numbers and reject invalid ones.',
+            'description': f"WebSocket accepted connection on invalid port 99999 at {invalid_port_url}.",
+            'solution': 'Ensure server validates port numbers and rejects those outside the 0–65535 range.',
             'affected_url': invalid_port_url,
-            'impact': 'Invalid ports can cause unexpected behavior.'
+            'impact': 'Invalid port acceptance can indicate improper input validation and may cause undefined behavior.'
         }
-    except ValueError as e:
-        return None
+
     except Exception as e:
-        print(colored(f"Invalid port test failed for {ws_url}: {e}", "yellow"))
-        return None
+        return {'name':'Invalid Port','risk':'No'}
     
 def test_non_ws_scheme(ws_url):
     """Test if WebSocket accepts non-WebSocket schemes (Vuln #22)."""
@@ -930,10 +855,10 @@ def test_non_ws_scheme(ws_url):
                 'impact': 'Non-WebSocket schemes can lead to protocol misuse if not handled properly.'
             }
         # If the scheme is valid, this test isn't applicable
-        return None
+        return {'name': 'Non-WS Scheme', 'risk': 'No'}
     except Exception as e:
         print(colored(f"Non-WebSocket scheme test failed for {ws_url}: {e}", "yellow"))
-        return None
+        return {'name': 'Non-WS Scheme', 'risk': 'No'}
 
 def test_undefined_opcode(ws_url):
     """Test undefined opcode (Vuln #23)."""
@@ -2689,102 +2614,110 @@ def test_query_parameter_flood(ws_url):
     except Exception as e:
         print(colored(f"Query parameter flood test failed for {ws_url}: {e}", "yellow"))
         return None
-
+    
+# 🔒 Handshake & Protocol Validation
 handshake_tests = [
-        test_omit_sec_websocket_key,  # 1
-        test_non_base64_sec_websocket_key,  # 2
-        test_oversized_sec_websocket_key,  # 3
-        test_duplicate_sec_websocket_key,  # 4
-        test_missing_sec_websocket_version,  # 5
-        test_invalid_sec_websocket_version,  # 6
-        test_conflicting_sec_websocket_version,  # 7
-        test_wrong_upgrade_header,  # 8
-        test_missing_connection_header,  # 9
-        test_case_sensitive_headers,  # 10
-        test_non_get_method,  # 11
-        test_fake_http_status,  # 12
-        test_wrong_sec_websocket_accept,  # 13 
-        test_oversized_headers,  # 14
-        test_missing_host_header,  # 15
-        test_fake_host_header,  # 16
-        test_multiple_host_headers,  # 17
-        test_long_url_path,  # 18
-        test_unicode_url,  # 19
-        test_http_0_9_handshake,  # 20
-    ]
-#21 and 22 are used to check if URL is valid.
-payload_tests = [
-    test_undefined_opcode,  # 23
-    test_reserved_opcode,  # 24
-    test_zero_length_fragment,  # 25
-    test_invalid_payload_length,  # 26
-    test_negative_payload_length,  # 27
-    test_mismatched_payload,  # 28
-    test_invalid_masking_key,  # 29
-    test_unmasked_client_frame,  # 30
-    test_invalid_rsv_bits,  # 31
-    test_oversized_control_frame,  # 32
-    test_non_utf8_text,  # 33
-    test_null_bytes_in_text,  # 34
-    test_binary_as_text,  # 35
-    test_text_as_binary,  # 36
-    test_invalid_close_code,  # 37
-    test_early_close_frame,  # 38
-    test_no_close_frame,  # 39
-    test_long_close_reason,  # 40
+    test_omit_sec_websocket_key,  # 3
+    test_non_base64_sec_websocket_key,  # 4
+    test_oversized_sec_websocket_key,  # 5
+    test_duplicate_sec_websocket_key,  # 6
+    test_missing_sec_websocket_version,  # 7
+    test_invalid_sec_websocket_version,  # 8
+    test_conflicting_sec_websocket_version,  # 9
+    test_wrong_upgrade_header,  # 10
+    test_missing_connection_header,  # 11
+    test_case_sensitive_headers,  # 12
+    test_non_get_method,  # 13
+    test_fake_http_status,  # 14
+    test_wrong_sec_websocket_accept,  # 15 
+    test_oversized_headers,  # 16
+    test_missing_host_header,  # 17
+    test_fake_host_header,  # 18
+    test_multiple_host_headers,  # 19
+    test_long_url_path,  # 20
+    test_unicode_url,  # 21
+    test_http_0_9_handshake,  # 22
 ]
+# 🔓 Authentication, Sessions & Identity Control
 auth_session_tests = [
-    test_no_session_cookie,  # 41
-    test_expired_cookie,  # 42
-    test_fake_token,  # 43
-    test_http_session_reuse,  # 44
-    test_stale_session_reconnect,  # 45
-    test_cross_site_cookie_hijack,  # 46
+    test_no_session_cookie,  # 23
+    test_expired_cookie,  # 24
+    test_fake_token,  # 25
+    test_http_session_reuse,  # 26
+    test_stale_session_reconnect,  # 27
+    test_cross_site_cookie_hijack,  # 28
+    test_authentication     #29
 ]
+# 🗂 Subprotocol & Extension Negotiation
 ws_subprotocol_tests = [
-    test_invalid_subprotocol,  # 47
-    test_conflicting_subprotocols,  # 48
-    test_unaccepted_subprotocol,  # 49
+    test_invalid_subprotocol,  # 30
+    test_conflicting_subprotocols,  # 31
+    test_unaccepted_subprotocol,  # 32
 ]
 subprotocol_tests = [
-    test_fake_extension,  # 50
-    test_conflicting_extensions,  # 51
+    test_fake_extension,  # 33
+    test_conflicting_extensions,  # 34
 ]
+# ⚡ Transport Security & Encryption
 security_tests = [
-    test_spoofed_connection_header,  # 52
-    test_http_1_0_downgrade,  # 53
+    test_spoofed_connection_header,  # 35
+    test_http_1_0_downgrade,  # 36
 ]
 ws_security_tests = [
-    test_tls_downgrade,  # 54
-    test_insecure_cipher,  # 55
-    test_certificate_mismatch,  # 56
+    test_tls_downgrade,  # 37
+    test_insecure_cipher,  # 38
+    test_certificate_mismatch,  # 39
 ]
-ws_dos_tests = [
-    test_connection_flood,  # 57
-    test_oversized_message,  # 58
-    test_max_connections,  # 59
-    test_idle_timeout_abuse,  # 60
-    test_high_compression_ratio,  # 62
-    test_resource_leak,  # 63
-    test_no_compression_negotiation,  # 61
-    test_no_timeout_policy,  # 64
+# 📦 Payload Handling & Fragmentation
+payload_tests = [
+    test_undefined_opcode,  # 40
+    test_reserved_opcode,  # 41
+    test_zero_length_fragment,  # 42
+    test_invalid_payload_length,  # 43
+    test_negative_payload_length,  # 44
+    test_mismatched_payload,  # 45
+    test_invalid_masking_key,  # 46
+    test_unmasked_client_frame,  # 47
+    test_invalid_rsv_bits,  # 48
+    test_oversized_control_frame,  # 49
+    test_non_utf8_text,  # 50
+    test_null_bytes_in_text,  # 51
+    test_binary_as_text,  # 52
+    test_text_as_binary,  # 53
+    test_invalid_close_code,  # 54
+    test_early_close_frame,  # 55
+    test_no_close_frame,  # 56
+    test_long_close_reason,  # 57
 ]
+# 🌍 Cross-Origin Policy & Browser-Side Risks
 cross_origin_tests = [
-    test_missing_cors_headers,  # 65
-    test_cross_origin_iframe,  # 66
-    test_mixed_content,  # 67
-    test_postmessage_abuse,  # 68
-    test_spoofed_url,  # 69
+    test_missing_cors_headers,  # 58
+    test_cross_origin_iframe,  # 59
+    test_mixed_content,  # 60
+    test_postmessage_abuse,  # 61
+    test_spoofed_url,  # 62
+    test_origin_check   #63
 ]
-ws_other_tests = [
-    test_error_message_leak,  # 70
-    test_server_disclosure,  # 71
-    test_invalid_content_type,  # 72
-    test_missing_security_headers,  # 73
-    test_url_path_traversal,  # 74
-    test_query_parameter_flood,  # 75
+# 🛡 Application-Layer Vulnerabilities
+ws_app_tests = [
+    test_error_message_leak,  # 64
+    test_server_disclosure,  # 65
+    test_invalid_content_type,  # 66
+    test_missing_security_headers,  # 67
+    test_url_path_traversal,  # 68
+    test_query_parameter_flood,  # 69
 ]
-
+# ⚠ DoS, Compression & Resource Limits
+ws_dos_tests = [
+    test_connection_flood,  # 70
+    test_oversized_message,  # 71
+    test_max_connections,  # 72
+    test_idle_timeout_abuse,  # 73
+    test_high_compression_ratio,  # 74
+    test_resource_leak,  # 75
+    test_no_compression_negotiation,  # 76
+    test_no_timeout_policy,  # 77
+]
 # def perform_websocket_tests(websocket_urls, payloads):
 #     """Perform WebSocket security tests."""
 #     ws_report = {}
@@ -2984,109 +2917,82 @@ def perform_websocket_tests(key, websocket_urls, payloads):
     """Perform WebSocket security tests concurrently, one thread per WebSocket."""
     ws_report = {}
     di1 = {
-        "Origin": 0,
-        "Authentication": 0,
-        "Fuzzing": 0,
-        "Handshake": 0,
-        "Payload": 0,
-        "Session": 0,
-        "Subprotocol": 0,
-        "Security": 0,
-        "DOS": 0,
-        "Cross-Origin": 0,
-        "Others": 0
+        "Handshake & Upgrade Validation":0,
+        "Authentication & Session Control":0,
+        "Subprotocols & Extension Handling":0,
+        "Transport Security & Encryption":0,
+        "Payload Framing & Messaging Semantics":0,
+        "Origin Policy & Cross-Origin Enforcement":0,
+        "Application-Layer Logic & Misconfigurations":0,
+        "DoS, Compression & Resource Limits":0,
+        "Protocol Fuzzing":0
     }
-
-    valid_ws = [ws for ws in websocket_urls if test_working_websocket(ws,ws_report,di1)][:5]
-    print(key,":",valid_ws)
-    if valid_ws:
-        def test_one_websocket(ws_url, payloads):
-            """Test a single WebSocket URL and return vulnerabilities and category counts."""
-            parsed_url = urlparse(ws_url)
-            host = parsed_url.hostname
-            scheme = parsed_url.scheme
-            port = parsed_url.port or (443 if scheme == 'wss' else 80)
-            path = parsed_url.path or "/"
-            vulnerabilities = []
-            local_di = {k: 0 for k in di1.keys()}
-            i = 1
-
-
-            # print("Running Origin Check")
-            # res = test_origin_check(ws_url)
-            # if res: vulnerabilities.append(res); local_di["Origin"] += 1
-
-            # print("Running Authentication Check")
-            # res = test_authentication(ws_url)
-            # if res: vulnerabilities.append(res); local_di["Authentication"] += 1
-
-            # print("Running Protocol Fuzzing")
-            # for payload in payloads:
-            #     res = test_fuzzing(ws_url, payload)
-            #     if res: vulnerabilities.append(res); local_di["Fuzzing"] += 1
-
-            print("Running Handshake & HTTP Request Tests")
-            for test_func in handshake_tests:
-                res = test_func(host, port, path, scheme)
-                if res: vulnerabilities.append(res); local_di["Handshake"] += 1
-
-            # print("Running Payload Handling & Fragmentation Tests")
-            # for test_func in payload_tests:
-            #     print(i); i += 1
-            #     res = test_func(ws_url)
-            #     if res: vulnerabilities.append(res); local_di["Payload"] += 1
-
-            # print("Running Authentication & Session Management Tests")
-            # for test_func in auth_session_tests:
-            #     print(i); i += 1
-            #     res = test_func(ws_url)
-            #     if res: vulnerabilities.append(res); local_di["Session"] += 1
-
-            # print("Running Subprotocol & Extension Tests")
-            # for test_func in ws_subprotocol_tests + subprotocol_tests:
-            #     print(i); i += 1
-            #     res = test_func(ws_url if 'ws' in test_func.__name__ else host, port, path)
-            #     if res: vulnerabilities.append(res); local_di["Subprotocol"] += 1
-
-            # print("Running Security & Encryption Tests")
-            # for test_func in security_tests + ws_security_tests:
-            #     print(i); i += 1
-            #     res = test_func(ws_url if 'ws' in test_func.__name__ else host, port, path)
-            #     if res: vulnerabilities.append(res); local_di["Security"] += 1
-
-            # print("Running DoS & Resource Management Tests")
-            # for test_func in ws_dos_tests:
-            #     print(i); i += 1
-            #     res = test_func(ws_url)
-            #     if res: vulnerabilities.append(res); local_di["DOS"] += 1
-
-            # print("Running Cross-Origin & Mixed Content Tests")
-            # for test_func in cross_origin_tests:
-            #     print(i); i += 1
-            #     res = test_func(ws_url)
-            #     if res: vulnerabilities.append(res); local_di["Cross-Origin"] += 1
-
-            # print("Running Other Vulnerability Tests")
-            # for test_func in ws_other_tests:
-            #     print(i); i += 1
-            #     res = test_func(ws_url)
-            #     if res: vulnerabilities.append(res); local_di["Others"] += 1
-
-            print(f"[{ws_url}] All tests completed.")
-            return ws_url, vulnerabilities, local_di
-        # Run threads for each WebSocket URL
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {executor.submit(test_one_websocket, ws, payloads): ws for ws in valid_ws}
-            for future in as_completed(futures):
-                try:
-                    ws_url, vulns, local_di = future.result()
-                    ws_report[ws_url] = vulns
-                    for k in di1:
-                        di1[k] += local_di.get(k, 0)
-                except Exception as e:
-                    print(f"[!] Error testing {futures[future]}: {e}")
+    valid_ws = test_working_websocket(websocket_urls)
+    valid_ws = valid_ws[:3]
     
-    else:
-        print(colored("All WebSocket URLs failed the test. Skipping the website: " + key, "red"))
+    def test_one_websocket(ws_url, payloads):
+        """Test a single WebSocket URL and return vulnerabilities and category counts."""
+        parsed_url = urlparse(ws_url)
+        host = parsed_url.hostname
+        scheme = parsed_url.scheme
+        port = parsed_url.port or (443 if scheme == 'wss' else 80)
+        path = parsed_url.path or "/"
+        vulnerabilities = []
+        local_di = {k: 0 for k in di1.keys()}
 
+        res = test_invalid_port(ws_url)
+        vulnerabilities.append(res); local_di["Handshake & Upgrade Validation"] += (1 if res.get('risk') != 'No' else 0)
+        res = test_non_ws_scheme(ws_url)
+        vulnerabilities.append(res); local_di["Handshake & Upgrade Validation"] += (1 if res.get('risk') != 'No' else 0)
+
+        for test_func in handshake_tests:
+            res = test_func(host, port, path, scheme)
+            if res: vulnerabilities.append(res); local_di["Handshake & Upgrade Validation"] += (1 if res.get('risk') != 'No' else 0)
+
+        # for test_func in auth_session_tests:
+        #     res = test_func(ws_url)
+        #     if res: vulnerabilities.append(res); local_di["Authentication & Session Control"] += (1 if res.get('risk') != 'No' else 0)
+
+        # for test_func in ws_subprotocol_tests + subprotocol_tests:
+        #     res = test_func(ws_url if 'ws' in test_func.__name__ else host, port, path)
+        #     if res: vulnerabilities.append(res); local_di["Subprotocols & Extension Handling"] += (1 if res.get('risk') != 'No' else 0)
+
+        # for test_func in security_tests + ws_security_tests:
+        #     res = test_func(ws_url if 'ws' in test_func.__name__ else host, port, path)
+        #     if res: vulnerabilities.append(res); local_di["Transport Security & Encryption"] += (1 if res.get('risk') != 'No' else 0)
+
+        # for test_func in payload_tests:
+        #     res = test_func(ws_url)
+        #     if res: vulnerabilities.append(res); local_di["Payload Framing & Messaging Semantics"] += 1(1 if res.get('risk') != 'No' else 0)
+
+        # for test_func in cross_origin_tests:
+        #     res = test_func(ws_url)
+        #     if res: vulnerabilities.append(res); local_di["Origin Policy & Cross-Origin Enforcement"] += (1 if res.get('risk') != 'No' else 0)
+
+        # for test_func in ws_app_tests:
+        #     res = test_func(ws_url)
+        #     if res: vulnerabilities.append(res); local_di["Application-Layer Logic & Misconfigurations"] += (1 if res.get('risk') != 'No' else 0)
+
+        # for test_func in ws_dos_tests:
+        #     res = test_func(ws_url)
+        #     if res: vulnerabilities.append(res); local_di["DoS, Compression & Resource Limits"] += (1 if res.get('risk') != 'No' else 0)
+
+        for payload in payloads:
+            res = test_fuzzing(ws_url, payload)
+            if res: vulnerabilities.append(res); local_di["Protocol Fuzzing"] += (1 if res.get('risk') != 'No' else 0)
+
+        print(f"[{ws_url}] All tests completed.")
+        return ws_url, vulnerabilities, local_di
+    # Run threads for each WebSocket URL
+    # with ThreadPoolExecutor(max_workers=3) as executor:
+    #     futures = {executor.submit(test_one_websocket, ws, payloads): ws for ws in valid_ws}
+    #     for future in as_completed(futures):
+    #         try:
+    #             ws_url, vulns, local_di = future.result()
+    #             ws_report[ws_url] = vulns
+    #             for k in di1:
+    #                 di1[k] += local_di.get(k, 0)
+    #         except Exception as e:
+    #             print(f"[!] Error testing {futures[future]}: {e}")
+    print(valid_ws)
     return ws_report, di1

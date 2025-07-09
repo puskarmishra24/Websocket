@@ -42,23 +42,6 @@ def pretty_print_combined_results(combined_results):
         print(f"  Scan Duration: {round(details.get('scan_duration', 0), 2)}s")
         print(f"  Crawl Notes: {details.get('crawl_notes', '')}")
 
-        # print("\n  Crawled URLs:")
-        # for i, crawled in enumerate(details.get("crawled_urls", []), 1):
-        #     print(f"    {i}. {crawled}")
-
-        print("\n  WebSocket Vulnerabilities:")
-        for ws, vulns in details.get("vulnerabilities", {}).items():
-            print(f"    WebSocket: {ws}")
-            flat_vulns = flatten_vulns(vulns)
-            for idx, v in enumerate(flat_vulns, 1):
-                print(f"      {idx}. [{v.get('risk')}] {v.get('name')}")
-                print(f"         → Affected: {v.get('affected_url', v.get('affected_host', 'N/A'))}")
-                print(f"         → Desc: {v.get('description', '')}")
-                print(f"         → Solution: {v.get('solution', '')}")
-
-        print("\n  Error Breakdown:")
-        for err_type, count in details.get("dict_errors", {}).items():
-            print(f"    {err_type}: {count}")
 pretty_print_combined_results(s)
 print(colored("\n[*] Generating PDF report...", "yellow"))
 try:

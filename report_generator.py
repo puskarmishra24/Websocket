@@ -11,6 +11,7 @@ from datetime import datetime
 from textwrap import wrap
 import os
 from html import escape
+from reportlab.graphics.charts.piecharts import Pie
 
 def create_wrapped_cell(text, width=60):
     """Helper function to wrap and escape text in table cells"""
@@ -152,12 +153,187 @@ def flatten_vuln_list(vuln_list):
             flat.extend([v for v in item if isinstance(v, dict)])
     return flat
 
-ATTACK_LIST = [f"Attack {i+1:02}" for i in range(75)]
+ATTACK_LIST = [
+    # 1. Handshake & Protocol Validation (1–22)
+    "Invalid Port",                          # 1
+    "Non-WS Scheme",                         # 2
+    "Omit Sec-WebSocket-Key",                # 3
+    "Non-Base64 Sec-WebSocket-Key",          # 4
+    "Oversized Sec-WebSocket-Key",           # 5
+    "Duplicate Sec-WebSocket-Key",           # 6
+    "Missing Sec-WebSocket-Version",         # 7
+    "Invalid Sec-WebSocket-Version",         # 8
+    "Conflicting Sec-WebSocket-Version",     # 9
+    "Wrong Upgrade Header",                  #10
+    "Missing Connection Header",             #11
+    "Case-Sensitive Headers",                #12
+    "Non-GET Method",                        #13
+    "Fake HTTP Status",                      #14
+    "Wrong Sec-WebSocket-Accept",            #15
+    "Oversized Headers",                     #16
+    "Missing Host Header",                   #17
+    "Fake Host Header",                      #18
+    "Multiple Host Headers",                 #19
+    "Long URL Path",                         #20
+    "Unicode URL",                           #21
+    "HTTP/0.9 Handshake",                    #22
 
+    # 2. Authentication & Session Control
+    "No Session Cookie",                     # 23
+    "Expired Cookie",                        # 24
+    "Fake Token",                            # 25
+    "HTTP Session Reuse",                    # 26
+    "Stale Session Reconnect",               # 27
+    "Cross-Site Cookie Hijack",              # 28
+    "Authentication Check",                  # 29
 
-def create_detailed_heatmap(combined_results, cell_width=6, cell_height=10, padding=1):
+    # 3. Subprotocols & Extension Handling
+    "Invalid Subprotocol",                   # 30
+    "Conflicting Subprotocols",              # 31
+    "Unaccepted Subprotocol",                # 32
+    "Fake Extension",                        # 33
+    "Conflicting Extensions",                # 34
+
+    # 4. Transport Security & Encryption
+    "Spoofed Connection Header",             # 35
+    "HTTP/1.0 Downgrade",                    # 36
+    "TLS Downgrade",                         # 37
+    "Weak TLS Ciphers",                      # 38
+    "Certificate Mismatch",                  # 39
+
+    # 5. Payload Framing & Messaging Semantics
+    "Undefined Opcode",                      # 40
+    "Reserved Opcode",                       # 41
+    "Zero-Length Fragment",                  # 42
+    "Invalid Payload Length",                # 43
+    "Negative Payload Length",               # 44
+    "Mismatched Payload",                    # 45
+    "Invalid Masking Key",                   # 46
+    "Unmasked Client Frame",                 # 47
+    "Invalid RSV Bits",                      # 48
+    "Oversized Control Frame",               # 49
+    "Non-UTF-8 Text",                        # 50
+    "Null Bytes in Text",                    # 51
+    "Binary as Text",                        # 52
+    "Text as Binary",                        # 53
+    "Invalid Close Code",                    # 54
+    "Early Close Frame",                     # 55
+    "No Close Frame",                        # 56
+    "Long Close Reason",                     # 57
+
+    # 6. Origin Policy & Cross-Origin Enforcement
+    "Missing CORS Headers",                  # 58
+    "Cross-Origin Iframe",                   # 59
+    "Mixed Content",                         # 60
+    "PostMessage Abuse",                     # 61
+    "Spoofed URL",                           # 62
+    "Origin Check",                          # 63
+
+    # 7. Application-Layer Logic & Misconfigurations
+    "Error Message Leak",                    # 64
+    "Server Disclosure",                     # 65
+    "Invalid Content-Type",                  # 66
+    "Missing Security Headers",              # 67
+    "URL Path Traversal",                    # 68
+    "Query Parameter Flood",                 # 69
+
+    # 8. DoS, Compression & Resource Limits
+    "Connection Flood",                      # 70
+    "Oversized Message",                     # 71
+    "Max Connections",                       # 72
+    "Idle Timeout Abuse",                    # 73
+    "No Compression Negotiation",            # 74
+    "High Compression Ratio",                # 75
+    "Resource Leak",                         # 76
+    "No Timeout Policy",                     # 77
+
+    # 9. Protocol Fuzzing
+    "Protocol Fuzzing"                       # 78
+]
+
+def create_side_by_side_pies_with_legend(error_dict, attack_list, width=400, height=200):
     """
-    Create a detailed heatmap showing WebSocket vs 75 attacks.
+    Draw two pie charts side by side with shared legend below.
+    Left = Attack Types (static), Right = Results (from dict_total_errors)
+    """
+    # Color palette (repeatable)
+    palette = [
+        colors.HexColor("#e41a1c"), colors.HexColor("#377eb8"),
+        colors.HexColor("#4daf4a"), colors.HexColor("#984ea3"),
+        colors.HexColor("#ff7f00"), colors.HexColor("#ffff33"),
+        colors.HexColor("#a65628"), colors.HexColor("#f781bf"),
+        colors.HexColor("#999999")
+    ]
+
+    # === Pie 1: Attack Types by Category ===
+    CATEGORY_SPLITS = {
+        "Handshake": (0, 22),
+        "Payload": (22, 40),
+        "Auth/Sessions": (40, 47),
+        "Subprotocols": (47, 52),
+        "Transport Security": (52, 57),
+        "DoS": (57, 66),
+        "Cross-Origin": (66, 72),
+        "Application": (72, 78),
+        "Fuzzing": (78,100)
+    }
+    cat_labels = list(CATEGORY_SPLITS.keys())
+    cat_data = [end - start for (_, (start, end)) in CATEGORY_SPLITS.items()]
+
+    # === Pie 2: Result Counts from dict_total_errors ===
+    result_labels = list(error_dict.keys())
+    result_data = list(error_dict.values())
+
+    drawing = Drawing(width, height)
+
+    pie1 = Pie()
+    pie1.x = 20
+    pie1.y = 80
+    pie1.width = 110
+    pie1.height = 110
+    pie1.data = cat_data
+    pie1.labels = []
+    total = sum(pie1.data)
+    pie1.simpleLabels = 1  # enables percentage-based labels inside
+    for i in range(len(pie1.data)):
+        percent = round((pie1.data[i] / total) * 100,2) if total else 0
+        pie1.slices[i].fillColor = palette[i % len(palette)]
+        pie1.labels.append(percent)
+
+    pie2 = Pie()
+    pie2.x = 200
+    pie2.y = 80
+    pie2.width = 110
+    pie2.height = 110
+    pie2.data = result_data
+    total2 = sum(pie2.data)
+    pie2.labels = []
+    pie2.simpleLabels = 1
+    for i in range(len(pie2.data)):
+        percent = round((pie2.data[i] / total2) * 100,2) if total2 else 0
+        pie2.slices[i].fillColor = palette[i % len(palette)]
+        pie2.labels.append(percent)
+
+    drawing.add(pie1)
+    drawing.add(pie2)
+
+    # === Legend ===
+    legend_y = 10
+    legend_x = 10
+    spacing = 65
+    box_size = 8
+
+    for i, label in enumerate(cat_labels):
+        x_pos = legend_x + (i % 5) * spacing
+        y_pos = legend_y - (i // 5) * 12
+        drawing.add(Rect(x_pos, y_pos, box_size, box_size, fillColor=palette[i % len(palette)]))
+        drawing.add(String(x_pos + box_size + 3, y_pos, label, fontSize=6))
+
+    return drawing
+
+def create_detailed_heatmap(combined_results, cell_width=5, cell_height=5, padding=1):
+    """
+    Create a detailed heatmap showing WebSocket vs 78 attacks.
     Colors: High=Red, Medium=Orange, Low=Yellow, Safe=Green, Not Run=Black.
     """
     attack_index = {name: idx for idx, name in enumerate(ATTACK_LIST)}
@@ -165,10 +341,10 @@ def create_detailed_heatmap(combined_results, cell_width=6, cell_height=10, padd
     fallback_color = colors.green  # attack run, no vuln
     missing_color = colors.black   # not run
 
-    ws_rows = []  # [(site → ws_url, {attack_name: risk})]
+    grouped_rows = {}
 
-    # Extract data per WebSocket
     for site, details in combined_results.get("detailed_results", {}).items():
+        grouped_rows[site] = []
         for ws_url, vuln_list in details.get("vulnerabilities", {}).items():
             flat = flatten_vuln_list(vuln_list)
             risk_map = {}
@@ -177,38 +353,43 @@ def create_detailed_heatmap(combined_results, cell_width=6, cell_height=10, padd
                 risk = v.get("risk")
                 if name and risk:
                     risk_map[name] = risk
-            label = f"{site} → {ws_url}"
-            ws_rows.append((label, risk_map))
+            grouped_rows[site].append(risk_map)
 
     # Drawing dimensions
     total_width = 150 + len(ATTACK_LIST) * (cell_width + padding) + padding
-    total_height = padding + len(ws_rows) * (cell_height + padding) + 50
+    total_height = padding + len(grouped_rows) * (cell_height + padding) + 50
 
     drawing = Drawing(total_width, total_height)
 
     # Column headers
     for idx, name in enumerate(ATTACK_LIST):
-        x = 3 + idx * (5 + padding)
-        drawing.add(String(x, total_height-10, f"{idx+1}", fontSize=4, textAnchor="middle"))
+        x = 3 + idx * (5)
+        drawing.add(String(74+x, total_height-6, f"{idx+1}", fontSize=4, textAnchor="middle"))
 
-    # Heatmap rows
-    for row_idx, (label, risk_map) in enumerate(ws_rows):
+    row_idx = 0
+    for site, ws_risks in grouped_rows.items():
         y = total_height - (row_idx + 2) * (cell_height + padding)
-        drawing.add(String(5, y + 2, label[:60], fontSize=5))  # label truncated
 
-        for attack_name in ATTACK_LIST:
-            x = attack_index[attack_name] * (cell_width)
-            risk = risk_map.get(attack_name)
+        # Write website name once
+        drawing.add(String(5, y + 2, site[:60], fontSize=6))
+        
+        for i, risk_map in enumerate(ws_risks):
+            y = total_height - (row_idx + 2) * (cell_height + padding)
 
-            if risk in color_map:
-                fill = color_map[risk]
-            elif attack_name in risk_map:
-                fill = fallback_color
-            else:
-                fill = missing_color
+            for attack_name in ATTACK_LIST:
+                x = attack_index[attack_name] * (cell_width)
+                risk = risk_map.get(attack_name)
 
-            drawing.add(Rect(x, y, cell_width, cell_height, fillColor=fill, strokeColor=colors.white))
+                if risk in color_map:
+                    fill = color_map[risk]
+                elif attack_name in risk_map:
+                    fill = fallback_color
+                else:
+                    fill = missing_color
 
+                drawing.add(Rect(75 + x, y, cell_width, cell_height, fillColor=fill, strokeColor=None))
+
+            row_idx += 1  # Next row
     return drawing
 
 def generate_pdf_report(combined_results):
@@ -388,21 +569,22 @@ def generate_pdf_report(combined_results):
         #     title="Vulnerability Distribution by Severity"
         # ))
 # === Heatmap Section ===
-        elements.append(Paragraph("Vulnerability Heatmap by Website", heading2_style))
-        elements.append(Spacer(1, 10))
+#         elements.append(Paragraph("Vulnerability Heatmap by Website", heading2_style))
+#         elements.append(Spacer(1, 10))
 
-# Build data for heatmap: {site: {"High": x, "Medium": y, "Low": z}, ...}
-        heatmap_data = {}
-        for url, details in combined_results.get("detailed_results", {}).items():
-            all_vulns = [v for vulns in details.get("vulnerabilities", {}).values() for v in vulns]
-            heatmap_data[url] = {
-                "High": sum(1 for v in all_vulns if v.get("risk") == "High"),
-                "Medium": sum(1 for v in all_vulns if v.get("risk") == "Medium"),
-                "Low": sum(1 for v in all_vulns if v.get("risk") == "Low")
-            }
+# # Build data for heatmap: {site: {"High": x, "Medium": y, "Low": z}, ...}
+#         heatmap_data = {}
+#         for url, details in combined_results.get("detailed_results", {}).items():
+#             all_vulns = [v for vulns in details.get("vulnerabilities", {}).values() for v in vulns]
+#             heatmap_data[url] = {
+#                 "High": sum(1 for v in all_vulns if v.get("risk") == "High"),
+#                 "Medium": sum(1 for v in all_vulns if v.get("risk") == "Medium"),
+#                 "Low": sum(1 for v in all_vulns if v.get("risk") == "Low")
+#             }
 
-        elements.append(create_heatmap(heatmap_data))
-        elements.append(Spacer(1, 30))
+#         elements.append(create_heatmap(heatmap_data))
+#         elements.append(Spacer(1, 30))
+        elements.append(PageBreak())
 
         heatmap = create_detailed_heatmap(combined_results)
         elements.append(Paragraph("WebSocket vs. Attack Heatmap", heading2_style))
@@ -428,7 +610,7 @@ def generate_pdf_report(combined_results):
         
         vuln_types = combined_results["dict_total_errors"]
         
-        type_data = [[k, str(v)] for k, v in vuln_types.items()]
+        type_data = [[k, str(v)] for k, v in vuln_types.items() if k != 'No']
         type_table = Table([["Type", "Count"]] + type_data, colWidths=[3*inch, 3*inch])
         type_table.setStyle(TableStyle([
             ('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
@@ -445,16 +627,30 @@ def generate_pdf_report(combined_results):
         elements.append(type_table)
         elements.append(Spacer(1, 30))
         
-        # Vulnerability Type Distribution Chart
-        type_counts = [v for v in vuln_types.values()]
-        type_categories = list(vuln_types.keys())
-        elements.append(create_bar_chart(
-            type_counts,
-            title="Vulnerability Distribution by Type",
-            categories=type_categories,
-            colors_list=[colors.blue] * len(type_categories),
-            height=180,
-            width=380
+        # # Vulnerability Type Distribution Chart
+        # type_counts = [v for v in vuln_types.values()]
+        # type_categories = list(vuln_types.keys())
+        # elements.append(create_bar_chart(
+        #     type_counts,
+        #     title="Vulnerability Distribution by Type",
+        #     categories=type_categories,
+        #     colors_list=[colors.blue] * len(type_categories),
+        #     height=180,
+        #     width=380
+        # ))
+        # elements.append(Spacer(1, 30))
+
+        # drawing = create_attack_type_piechart(ATTACK_LIST)
+        # elements.append(Paragraph("Test Type Distribution", heading2_style))
+        # elements.append(drawing)
+        # drawing = create_attack_results_piechart(combined_results["dict_total_errors"])
+        # elements.append(Paragraph("Attack Result Summary", heading2_style))
+        # elements.append(drawing)
+
+        elements.append(Paragraph("Test Distribution vs Results", heading2_style))
+        elements.append(create_side_by_side_pies_with_legend(
+            combined_results["dict_total_errors"],
+            ATTACK_LIST
         ))
         elements.append(Spacer(1, 30))
         elements.append(PageBreak())
@@ -492,7 +688,6 @@ def generate_pdf_report(combined_results):
                 ["URLs Crawled:", str(url_result.get('num_crawled_urls', 0))],
                 ["WebSocket Endpoints Found:", str(url_result.get('num_websockets', 0))],
                 ["Attack Performed:", "True" if all_vulns else "False"],
-                ["Attack Type:", "WebSocket Tests" if all_vulns else "None"],
                 ["High Severity Findings:", str(sum(1 for v in all_vulns if v.get('risk') == 'High'))],
                 ["Medium Severity Findings:", str(sum(1 for v in all_vulns if v.get('risk') == 'Medium'))],
                 ["Low Severity Findings:", str(sum(1 for v in all_vulns if v.get('risk') == 'Low'))]
@@ -589,6 +784,8 @@ def generate_pdf_report(combined_results):
                     flat_vulns = flatten_vuln_list(vuln_list)
                     for vuln in flat_vulns:
                         risk = vuln.get('risk', 'Unknown')
+                        if risk == 'No':
+                            continue
                         bg_color = colors.mistyrose if risk == 'High' else \
                                 colors.lightgoldenrodyellow if risk == 'Medium' else \
                                 colors.lightgreen

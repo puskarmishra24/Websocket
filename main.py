@@ -30,20 +30,18 @@ async def main():
         'scan_start_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         'total_scan_duration': 0,
         'urls_scanned': [],
-        'total_vulnerabilities': {'High': 0, 'Medium': 0, 'Low': 0},
+        'total_vulnerabilities': {'High': 0, 'Medium': 0, 'Low': 0, 'No':0},
         'detailed_results': {},
         'dict_total_errors':{
-            "Origin":0,
-            "Authentication":0,
-            "Fuzzing":0,
-            "Handshake":0,
-            "Payload":0,
-            "Session":0,
-            "Subprotocol":0,
-            "Security":0,
-            "DOS":0,
-            "Cross-Origin":0,
-            "Others":0
+            "Handshake & Upgrade Validation":0,
+            "Authentication & Session Control":0,
+            "Subprotocols & Extension Handling":0,
+            "Transport Security & Encryption":0,
+            "Payload Framing & Messaging Semantics":0,
+            "Origin Policy & Cross-Origin Enforcement":0,
+            "Application-Layer Logic & Misconfigurations":0,
+            "DoS, Compression & Resource Limits":0,
+            "Protocol Fuzzing":0,
         }
     }
 
@@ -156,53 +154,57 @@ async def main():
 
 
     #         }
+
+    CONCURRENCY_LIMIT = 4
+    semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
     async def scan_target_url(target_url, idx, di, combined_results):
-        if not target_url.startswith(('http://', 'https://')):
-            print(colored(f"[-] Invalid URL: {target_url}. Skipping.", "red"))
-            return
-
-        print(colored(f"\n[Scanning {idx}] {target_url}", "blue", attrs=['bold']))
-        print(colored("-" * 60, "blue"))
-        start_time = time.time()
-
-        try:
-            crawl_data = await crawler.crawl_website(target_url)
-            if not isinstance(crawl_data, dict):
-                print(colored("Crawling failed to return expected data structure. Skipping this site.", "red"))
+        async with semaphore:
+            if not target_url.startswith(('http://', 'https://')):
+                print(colored(f"[-] Invalid URL: {target_url}. Skipping.", "red"))
                 return
 
-            print(colored(f"[+] Crawling complete: {crawl_data['num_crawls']} URLs, {crawl_data['num_websockets']} WebSocket endpoints", "green"))
-            # print(colored("\nCrawled URLs:", "cyan"))
-            # for i, url in enumerate(crawl_data['crawled_urls'], 1):
-            #     print(colored(f"  {i}. {url}", "white"))
+            print(colored(f"\n[Scanning {idx}] {target_url}", "blue", attrs=['bold']))
+            print(colored("-" * 60, "blue"))
+            start_time = time.time()
 
-            print(colored("\nWebSocket Endpoints:", "blue", attrs=["bold"]))
-            for i, ws_url in enumerate(crawl_data['websocket_urls'], 1):
-                print(colored(f"  {i}. {ws_url}", "white"))
+            try:
+                crawl_data = await crawler.crawl_website(target_url)
+                if not isinstance(crawl_data, dict):
+                    print(colored("Crawling failed to return expected data structure. Skipping this site.", "red"))
+                    return
 
-            di[target_url] = crawl_data['websocket_urls']
-            scan_duration = time.time() - start_time
+                print(colored(f"[+] Crawling complete: {crawl_data['num_crawls']} URLs, {crawl_data['num_websockets']} WebSocket endpoints", "green"))
+                # print(colored("\nCrawled URLs:", "cyan"))
+                # for i, url in enumerate(crawl_data['crawled_urls'], 1):
+                #     print(colored(f"  {i}. {url}", "white"))
 
-            combined_results['detailed_results'][target_url] = {
-                'num_crawled_urls': crawl_data['num_crawls'],
-                'crawled_urls': crawl_data['crawled_urls'],
-                'num_websockets': len(crawl_data['websocket_urls']),
-                'websocket_urls': crawl_data['websocket_urls'],
-                'crawl_notes': crawl_data.get('crawl_notes', ''),
-                'scan_duration': scan_duration,
-            }
+                print(colored("\nWebSocket Endpoints:", "blue", attrs=["bold"]))
+                for i, ws_url in enumerate(crawl_data['websocket_urls'], 1):
+                    print(colored(f"  {i}. {ws_url}", "white"))
 
-        except Exception as e:
-            print(colored(f"[-] Error crawling {target_url}: {e}", "red"))
-            di[target_url] = []
-            combined_results['detailed_results'][target_url] = {
-                'num_crawled_urls': 0,
-                'crawled_urls': [],
-                'num_websockets': 0,
-                'websocket_urls': [],
-                'crawl_notes': f"Error during crawl: {str(e)}",
-                'scan_duration': 0
-            }
+                di[target_url] = crawl_data['websocket_urls']
+                scan_duration = time.time() - start_time
+
+                combined_results['detailed_results'][target_url] = {
+                    'num_crawled_urls': crawl_data['num_crawls'],
+                    'crawled_urls': crawl_data['crawled_urls'],
+                    'num_websockets': len(crawl_data['websocket_urls']),
+                    'websocket_urls': crawl_data['websocket_urls'],
+                    'crawl_notes': crawl_data.get('crawl_notes', ''),
+                    'scan_duration': scan_duration,
+                }
+
+            except Exception as e:
+                print(colored(f"[-] Error crawling {target_url}: {e}", "red"))
+                di[target_url] = []
+                combined_results['detailed_results'][target_url] = {
+                    'num_crawled_urls': 0,
+                    'crawled_urls': [],
+                    'num_websockets': 0,
+                    'websocket_urls': [],
+                    'crawl_notes': f"Error during crawl: {str(e)}",
+                    'scan_duration': 0
+                }
 
     tasks = [scan_target_url(url, idx, di, combined_results) for idx, url in enumerate(target_urls, 1)]
     await asyncio.gather(*tasks)
@@ -239,7 +241,6 @@ async def main():
             if websocket_urls:
                 di[url] = websocket_urls
                 combined_results["detailed_results"][url]["websocket_urls"] = websocket_urls
-                combined_results["detailed_results"][url]["num_websockets"] = len(websocket_urls)
                 combined_results["detailed_results"][url]["crawl_notes"] += "WebSocket URLs added post-scan."
                 print(colored(f"    [+] {len(websocket_urls)} WebSocket URL(s) added to {url}", "green"))
             else:

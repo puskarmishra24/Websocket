@@ -9,11 +9,6 @@ import logging
 import random
 import json
 import os
-# try:
-#     from playwright_stealth import stealth_async
-# except ImportError:
-#     print(colored("playwright_stealth not installed. Falling back to basic stealth.", "yellow"))
-#     stealth_async = None
 
 logging.basicConfig(level=logging.CRITICAL)
 
@@ -62,30 +57,6 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
                 timezone_id="America/New_York",
             )
 
-            # Apply stealth
-            # if stealth_async:
-            #     try:
-            #         await stealth_async(context)
-            #     except Exception as e:
-            #         logging.warning(f"Stealth failed: {e}. Falling back to basic stealth.")
-            #         await context.add_init_script("""
-            #             Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-            #             Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
-            #             Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => Math.floor(Math.random() * 8 + 2) });
-            #             Object.defineProperty(navigator, 'deviceMemory', { get: () => Math.floor(Math.random() * 8 + 4) });
-            #             window.chrome = { runtime: {}, loadTimes: () => {} };
-            #             Object.defineProperty(navigator, 'plugins', { get: () => [{name: 'PDF Viewer'}, {name: 'Chrome PDF Viewer'}] });
-            #             Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-            #             Object.defineProperty(window, 'screen', {
-            #                 get: () => ({
-            #                     width: Math.floor(Math.random() * 600 + 1200),
-            #                     height: Math.floor(Math.random() * 400 + 600),
-            #                     availWidth: Math.floor(Math.random() * 600 + 1200),
-            #                     availHeight: Math.floor(Math.random() * 400 + 600),
-            #                 })
-            #             });
-            #         """)
-            # else:
             await context.add_init_script("""
                     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
                     Object.defineProperty(navigator, 'platform', { get: () => 'Win32' });
@@ -354,15 +325,11 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
         print(colored("No WebSocket endpoints found.", "yellow"))
     else:
         print(colored(f"Found {len(websocket_urls)} WebSocket endpoints:", "green"))
-        # for ws_url in websocket_urls:
-        #     print(colored(f"- {ws_url}", "green"))
 
     if not all_discovered_urls:
         print(colored("No URLs discovered.", "yellow"))
     else:
         print(colored(f"Discovered {len(all_discovered_urls)} URLs (including non-crawled):", "green"))
-        # for d_url in sorted(all_discovered_urls):
-        #     print(colored(f"- {d_url}", "green"))
 
     return {
         "num_crawls": len(crawled_urls),
@@ -371,3 +338,5 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
         "websocket_urls": list(websocket_urls),
         "crawl_notes": "No WebSocket endpoints found from crawling." if not websocket_urls else ""
     }
+
+#https://www.cryptocompare.com, https://www.tradingview.com, https://www.twitch.tv,https://www.discord.com,https://www.binance.com,https://websocket.org,https://kaazing.com,https://ifelse.io,https://postman.com,https://nownodes.io,https://publicnode.com,https://ankr.com,https://coinsdo.com,http://ws.vi-server.org,http://websocket-echo-intustack.koyeb.app,https://echo-websocket.fly.dev,https://socketsbay.com,https://www.okx.com/docs-v5/en/#overview,https://docs.kraken.com/api/,https://www.blockchain.com/en/,https://docs.bitfinex.com/docs/introduction,https://www.bitstamp.net/,https://docs.gemini.com/get-started/intro,https://pro.coincap.io/api-docs, https://developers.binance.com/en
