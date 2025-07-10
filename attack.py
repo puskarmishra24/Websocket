@@ -18,6 +18,7 @@ import binascii
 import requests
 from hashlib import sha1
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import re
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -81,22 +82,33 @@ def send_raw_handshake(host, port, request_headers, scheme="ws", timeout=10):
 
 def test_working_websocket(url_list):
     """Ensure invalid websockets are not being tested on."""
-    for idx, url in enumerate(url_list,0):
-        if "<" in url:
-            l = url.split('<')
-            a = l[0]
-            if a.startswith('wss://'):
-                b = a[6:]
-            elif a.startswith('ws://'):
-                b = a[5:]
-        print(b)
-        if b == '':
-            continue
-        elif 'example' in b:
-            continue
-        else:
-            url[idx] = b
-    url = list(set(url))
+    cleaned_urls = []
+    for url in url_list:
+        # 1. Remove everything after an angle bracket (`<`, `>`)
+        url = re.split(r'[<>]', url)[0]
+        url = re.sub(r'&lt;|&gt;|&amp;', '', url)
+        # 2. Remove trailing HTML-like fragments such as `</code>`, `<span`, etc.
+        url = re.sub(r'</?\w+[^>]*>', '', url)
+        url = url.split('?')[0]
+        # 3. Remove everything after unexpected trailing characters like `,` or stray quotes
+        url = re.split(r'[,"\')\]]', url)[0]
+
+        # 4. Remove whitespace from beginning and end
+        url = url.strip()
+
+        # 5. Remove trailing slash
+        if url.endswith('/'):
+            url = url[:-1]
+
+        # 6. Validate WebSocket URL format (must start with ws:// or wss:// and have at least host)
+        if re.match(r'^wss?://[^/\s]+(?:/[^\s]*)?$', url):
+            cleaned_urls.append(url)
+
+    # Remove duplicates
+    unique_urls = list(set(cleaned_urls))
+
+    return unique_urls
+
 def send_custom_frame(ws_url, frame_data):
     """Send a custom WebSocket frame (binary) and return the server's response."""
     try:
@@ -2949,50 +2961,67 @@ def perform_websocket_tests(key, websocket_urls, payloads):
             res = test_func(host, port, path, scheme)
             if res: vulnerabilities.append(res); local_di["Handshake & Upgrade Validation"] += (1 if res.get('risk') != 'No' else 0)
 
-        # for test_func in auth_session_tests:
-        #     res = test_func(ws_url)
-        #     if res: vulnerabilities.append(res); local_di["Authentication & Session Control"] += (1 if res.get('risk') != 'No' else 0)
+        for test_func in auth_session_tests:
+            res = test_func(ws_url)
+            if res: vulnerabilities.append(res); local_di["Authentication & Session Control"] += (1 if res.get('risk') != 'No' else 0)
 
-        # for test_func in ws_subprotocol_tests + subprotocol_tests:
-        #     res = test_func(ws_url if 'ws' in test_func.__name__ else host, port, path)
-        #     if res: vulnerabilities.append(res); local_di["Subprotocols & Extension Handling"] += (1 if res.get('risk') != 'No' else 0)
+        # Run tests that take only ws_url
+        for test_func in ws_subprotocol_tests:
+            res = test_func(ws_url)
+            if res:
+                vulnerabilities.append(res)
+                local_di["Subprotocols & Extension Handling"] += (1 if res.get('risk') != 'No' else 0)
 
-        # for test_func in security_tests + ws_security_tests:
-        #     res = test_func(ws_url if 'ws' in test_func.__name__ else host, port, path)
-        #     if res: vulnerabilities.append(res); local_di["Transport Security & Encryption"] += (1 if res.get('risk') != 'No' else 0)
+        # Run tests that take host, port, path
+        for test_func in subprotocol_tests:
+            res = test_func(host, port, path)
+            if res:
+                vulnerabilities.append(res)
+                local_di["Subprotocols & Extension Handling"] += (1 if res.get('risk') != 'No' else 0)
 
-        # for test_func in payload_tests:
-        #     res = test_func(ws_url)
-        #     if res: vulnerabilities.append(res); local_di["Payload Framing & Messaging Semantics"] += 1(1 if res.get('risk') != 'No' else 0)
+        for test_func in security_tests:
+            res = test_func(host, port, path)
+            if res:
+                vulnerabilities.append(res)
+                local_di["Transport Security & Encryption"] += (1 if res.get('risk') != 'No' else 0)
 
-        # for test_func in cross_origin_tests:
-        #     res = test_func(ws_url)
-        #     if res: vulnerabilities.append(res); local_di["Origin Policy & Cross-Origin Enforcement"] += (1 if res.get('risk') != 'No' else 0)
+        for test_func in ws_security_tests:
+            res = test_func(ws_url)
+            if res:
+                vulnerabilities.append(res)
+                local_di["Transport Security & Encryption"] += (1 if res.get('risk') != 'No' else 0)
 
-        # for test_func in ws_app_tests:
-        #     res = test_func(ws_url)
-        #     if res: vulnerabilities.append(res); local_di["Application-Layer Logic & Misconfigurations"] += (1 if res.get('risk') != 'No' else 0)
+        for test_func in payload_tests:
+            res = test_func(ws_url)
+            if res: vulnerabilities.append(res); local_di["Payload Framing & Messaging Semantics"] += (1 if res.get('risk') != 'No' else 0)
+
+        for test_func in cross_origin_tests:
+            res = test_func(ws_url)
+            if res: vulnerabilities.append(res); local_di["Origin Policy & Cross-Origin Enforcement"] += (1 if res.get('risk') != 'No' else 0)
+
+        for test_func in ws_app_tests:
+            res = test_func(ws_url)
+            if res: vulnerabilities.append(res); local_di["Application-Layer Logic & Misconfigurations"] += (1 if res.get('risk') != 'No' else 0)
 
         # for test_func in ws_dos_tests:
         #     res = test_func(ws_url)
         #     if res: vulnerabilities.append(res); local_di["DoS, Compression & Resource Limits"] += (1 if res.get('risk') != 'No' else 0)
 
-        for payload in payloads:
-            res = test_fuzzing(ws_url, payload)
-            if res: vulnerabilities.append(res); local_di["Protocol Fuzzing"] += (1 if res.get('risk') != 'No' else 0)
+        # for payload in payloads:
+        #     res = test_fuzzing(ws_url, payload)
+        #     if res: vulnerabilities.append(res); local_di["Protocol Fuzzing"] += (1 if res.get('risk') != 'No' else 0)
 
         print(f"[{ws_url}] All tests completed.")
         return ws_url, vulnerabilities, local_di
-    # Run threads for each WebSocket URL
-    # with ThreadPoolExecutor(max_workers=3) as executor:
-    #     futures = {executor.submit(test_one_websocket, ws, payloads): ws for ws in valid_ws}
-    #     for future in as_completed(futures):
-    #         try:
-    #             ws_url, vulns, local_di = future.result()
-    #             ws_report[ws_url] = vulns
-    #             for k in di1:
-    #                 di1[k] += local_di.get(k, 0)
-    #         except Exception as e:
-    #             print(f"[!] Error testing {futures[future]}: {e}")
-    print(valid_ws)
+    #Run threads for each WebSocket URL
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        futures = {executor.submit(test_one_websocket, ws, payloads): ws for ws in valid_ws}
+        for future in as_completed(futures):
+            try:
+                ws_url, vulns, local_di = future.result()
+                ws_report[ws_url] = vulns
+                for k in di1:
+                    di1[k] += local_di.get(k, 0)
+            except Exception as e:
+                print(f"[!] Error testing {futures[future]}: {e}")
     return ws_report, di1
