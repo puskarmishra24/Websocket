@@ -19,21 +19,26 @@ import requests
 from hashlib import sha1
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import re
+import json
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def load_payload(file_name):
-    """Load payloads from the specified file."""
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    file_path = os.path.join(base_dir, file_name)
-    if not os.path.exists(file_path):
-        raise FileNotFoundError(f"Payload file not found: {file_path}")
-    with open(file_path, "r", encoding='utf-8', errors='ignore') as file:
-        return [line.strip() for line in file.readlines() if line.strip()]
-
 def attack_website(key,websocket_urls):
     """Main function to handle WebSocket attack logic."""
-    websocket_payloads = load_payload("websocket_payload.txt")
+    websocket_payloads = [
+    {"name": "Malformed JSON", "payload": '{"type": "invalid_json", "data": "unclosed bracket'},
+    {"name": "XSS Attempt", "payload": "<script>alert('XSS')</script>"},
+    {"name": "Large Payload for DoS (JSON)", "payload": {"type": "large_payload", "data": "A" * 1000000}},
+    {"name": "Invalid Binary Frame", "payload": b"\x00\xFF\xFE\xFD"},
+    {"name": "Command Injection Simulation", "payload": {"command": "whoami; ls"}},
+    {"name": "SQL Injection Simulation", "payload": {"query": "SELECT * FROM users WHERE id = '1' OR '1'='1'"}},
+    {"name": "Expression Evaluation Injection", "payload": "${{7*7}}"},
+    {"name": "Null Bytes in JSON String", "payload": b'{"data": "\\0\\0\\0"}'},
+    {"name": "Unicode Characters in Payload", "payload": {"data": "🚀🌟💥"}},
+    {"name": "Oversized DoS Message (JSON)", "payload": {"message": "B" * 2000000}},
+    {"name": "Path Traversal Simulation", "payload": {"path": "/../../etc/passwd"}},
+    {"name": "PostMessage Abuse Simulation", "payload": {"message": "window.postMessage('malicious','*')"}}
+]
     print(colored("Starting WebSocket tests...", "yellow"))
     vulnerabilities = perform_websocket_tests(key, websocket_urls, websocket_payloads)
     return vulnerabilities
@@ -115,20 +120,13 @@ def send_custom_frame(ws_url, frame_data):
         ws = WebSocket()
         ws.connect(ws_url, timeout=5)
 
-        # Debug: Print the frame in hex for inspection (optional)
-        print(colored(f"[DEBUG] Sending frame to {ws_url}: {binascii.hexlify(frame_data).decode()}", "cyan"))
-
         ws.send_binary(frame_data)
         response = ws.recv()
-
-        # Debug: Print the response (optional)
-        print(colored(f"[DEBUG] Received response from {ws_url}: {repr(response)}", "green"))
 
         ws.close()
         return response
 
     except WebSocketException as e:
-        print(colored(f"[ERROR] Custom frame failed for {ws_url}: {e}", "yellow"))
         return None
 
     except Exception as e:
@@ -177,39 +175,55 @@ def test_authentication(ws_url):
         logging.info(f"Authentication test for {ws_url}: {e}")
         return {'name':'Missing Authentication','risk':'No'}
 
-def test_fuzzing(ws_url, payload):
+def test_fuzzing(ws_url, payload, name):
     """Perform protocol fuzzing with payloads."""
     try:
         ws = WebSocket()
         ws.connect(ws_url, timeout=5)
+
+        if isinstance(payload, dict):
+            payload = json.dumps(payload)
+        elif isinstance(payload, bytes):
+            pass  # send raw
+        else:
+            payload = str(payload)
+
         ws.send(payload)
+
         try:
             response = ws.recv()
             ws.close()
             if response:
                 return {
-                    'name': 'Protocol Fuzzing Vulnerability',
+                    'name': 'Protocol Fuzzing',
                     'risk': 'Medium',
-                    'description': f"WebSocket at {ws_url} responds to malformed payload: {payload[:50]}...",
+                    'description': f"WebSocket at {ws_url} responded to malformed payload type: {name}.",
                     'solution': 'Implement robust input validation and reject malformed messages.',
                     'affected_url': ws_url,
-                    'impact': 'Malformed messages may cause server errors or data leaks.'
+                    'impact': 'Malformed messages may lead to unsafe behavior or data leaks.'
                 }
-            return {'name':'Protocol Fuzzing Vulnerability','risk':'No'}
+            else:
+                return {
+                    'name': 'Protocol Fuzzing',
+                    'risk': 'No'
+                }
         except WebSocketException:
             ws.close()
             return {
-                'name': 'Protocol Fuzzing Crash',
-                'risk': 'High',
-                'description': f"WebSocket at {ws_url} crashed or closed connection on payload: {payload[:50]}...",
-                'solution': 'Handle malformed messages gracefully to prevent crashes.',
+                'name': 'Protocol Fuzzing',
+                'risk': 'Low',
+                'description': f"WebSocket at {ws_url} closed connection on malformed payload: {name}.",
+                'solution': 'Ensure server logs and rejects invalid frames correctly.',
                 'affected_url': ws_url,
-                'impact': 'Server crashes can lead to denial-of-service.'
+                'impact': 'Likely a safe defensive measure, but review logs to confirm.'
             }
-    except WebSocketException as e:
-        logging.info(f"Fuzzing test for {ws_url}: {e}")
-        return {'name':'Protocol Fuzzing Vulnerability','risk':'No'}
-    
+    except WebSocketException:
+        # Connection could not be established
+        return {
+            'name': 'Protocol Fuzzing',
+            'risk': 'No'
+        }
+  
 def test_omit_sec_websocket_key(host, port, path="/", scheme="ws"):
     """Test omitting Sec-WebSocket-Key header (Vuln #3)."""
     req = (
@@ -869,7 +883,6 @@ def test_non_ws_scheme(ws_url):
         # If the scheme is valid, this test isn't applicable
         return {'name': 'Non-WS Scheme', 'risk': 'No'}
     except Exception as e:
-        print(colored(f"Non-WebSocket scheme test failed for {ws_url}: {e}", "yellow"))
         return {'name': 'Non-WS Scheme', 'risk': 'No'}
 
 def test_undefined_opcode(ws_url):
@@ -899,11 +912,11 @@ def test_undefined_opcode(ws_url):
             'solution': 'Reject frames with undefined opcodes.',
             'affected_url': ws_url,
             'impact': 'Undefined opcodes can cause unexpected server behavior.'
-        } if response else None
+        } if response else {'name': 'Undefined Opcode', 'risk': 'No'}
 
     except Exception as e:
         # You could log e here if needed
-        return None
+        return {'name': 'Undefined Opcode', 'risk': 'No'}
     
 def test_reserved_opcode(ws_url):
     """Test reserved opcode (Vuln #24)."""
@@ -933,12 +946,11 @@ def test_reserved_opcode(ws_url):
             'solution': 'Reject frames with reserved opcodes (0x3-0x7, 0xB-0xF).',
             'affected_url': ws_url,
             'impact': 'Reserved opcodes can lead to protocol errors.'
-        } if response else None
+        } if response else {'name': 'Reserved Opcode', 'risk': 'No'}
 
     except Exception as e:
-        # Optionally log the exception
-        return None
-    
+        return {'name': 'Reserved Opcode', 'risk': 'No'}
+  
 def test_zero_length_fragment(ws_url):
     """Test zero-length fragments (Vuln #25)."""
     try:
@@ -968,11 +980,10 @@ def test_zero_length_fragment(ws_url):
             }
 
         # If server gave no response to any zero-length fragment, it likely handled it safely
-        return None
+        return {'name': 'Zero-Length Fragment', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Zero-length fragment test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Zero-Length Fragment', 'risk': 'No'}
     
 def test_invalid_payload_length(ws_url):
     """Test invalid payload length (Vuln #26)."""
@@ -999,11 +1010,10 @@ def test_invalid_payload_length(ws_url):
             'solution': 'Validate payload length matches actual data.',
             'affected_url': ws_url,
             'impact': 'Invalid lengths can cause buffer overflows or crashes.'
-        } if response else None
+        } if response else {'name': 'Invalid Payload Length', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Invalid payload length test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Invalid Payload Length', 'risk': 'No'}
 
 def test_negative_payload_length(ws_url):
     """Test forged negative payload length (Vuln #27)."""
@@ -1035,11 +1045,10 @@ def test_negative_payload_length(ws_url):
             'solution': 'Validate payload length fields and reject extreme or invalid values.',
             'affected_url': ws_url,
             'impact': 'Signed overflows in length handling can lead to crashes or memory corruption.'
-        } if response else None
+        } if response else {'name': 'Negative Payload Length', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Negative payload length test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Negative Payload Length', 'risk': 'No'}
 
 
 def test_mismatched_payload(ws_url):
@@ -1067,11 +1076,10 @@ def test_mismatched_payload(ws_url):
                 'impact': 'Can lead to parsing errors, decoder crashes, or type confusion.'
             }
 
-        return None
+        return {'name': 'Mismatched Payload', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Mismatched payload test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Mismatched Payload', 'risk': 'No'}
 
 
 def test_invalid_masking_key(ws_url):
@@ -1100,7 +1108,6 @@ def test_invalid_masking_key(ws_url):
                 masked_payload
             )
 
-            print(colored(f"[DEBUG] Sending frame with mask: {label}", "cyan"))
             response = send_custom_frame(ws_url, frame)
             responses.append((label, response))
 
@@ -1115,11 +1122,10 @@ def test_invalid_masking_key(ws_url):
                     'impact': 'Improper masking validation may cause data integrity issues or security flaws.'
                 }
 
-        return None
+        return {'name': 'Invalid Masking Key', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Invalid masking key test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Invalid Masking Key', 'risk': 'No'}
 
 
 def test_unmasked_client_frame(ws_url):
@@ -1141,11 +1147,10 @@ def test_unmasked_client_frame(ws_url):
             'solution': 'Require masking for all client-to-server frames per RFC 6455.',
             'affected_url': ws_url,
             'impact': 'Unmasked frames can be intercepted or misused in shared environments.'
-        } if response else None
+        } if response else {'name': 'Unmasked Client Frame', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Unmasked client frame test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Unmasked Client Frame', 'risk': 'No'}
 
 
 def test_invalid_rsv_bits(ws_url):
@@ -1174,7 +1179,6 @@ def test_invalid_rsv_bits(ws_url):
                 masked_payload
             )
 
-            print(colored(f"[DEBUG] Sending frame with {label} set", "cyan"))
             response = send_custom_frame(ws_url, frame)
             results.append((label, response))
 
@@ -1189,11 +1193,10 @@ def test_invalid_rsv_bits(ws_url):
                     'impact': 'May trigger unintended behaviors, desyncs, or extension misinterpretation.'
                 }
 
-        return None
+        return {'name': 'Invalid RSV Bits', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Invalid RSV bits test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Invalid RSV Bits', 'risk': 'No'}
 
 
 def test_oversized_control_frame(ws_url):
@@ -1220,11 +1223,10 @@ def test_oversized_control_frame(ws_url):
             'solution': 'Reject control frames larger than 125 bytes as per RFC 6455.',
             'affected_url': ws_url,
             'impact': 'Oversized control frames can crash or desync the server.'
-        } if response else None
+        } if response else {'name': 'Oversized Control Frame', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Oversized control frame test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Oversized Control Frame', 'risk': 'No'}
 
 
 def test_non_utf8_text(ws_url):
@@ -1252,11 +1254,10 @@ def test_non_utf8_text(ws_url):
             'solution': 'Ensure strict UTF-8 validation of text frames.',
             'affected_url': ws_url,
             'impact': 'Improper decoding may cause crashes, parser confusion, or security flaws.'
-        } if response else None
+        } if response else {'name': 'Non-UTF-8 Text', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Non-UTF-8 text test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Non-UTF-8 Text', 'risk': 'No'}
 
 
 def test_null_bytes_in_text(ws_url):
@@ -1284,11 +1285,10 @@ def test_null_bytes_in_text(ws_url):
             'solution': 'Validate and sanitize text frames for embedded nulls. Avoid C-style string truncation risks.',
             'affected_url': ws_url,
             'impact': 'Null bytes may cause truncation, spoofing, or parsing logic issues in downstream systems.'
-        } if response else None
+        } if response else {'name': 'Null Bytes in Text', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Null byte test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Null Bytes in Text', 'risk': 'No'}
 
 
 def test_binary_as_text(ws_url):
@@ -1316,11 +1316,10 @@ def test_binary_as_text(ws_url):
             'solution': 'Validate UTF-8 compliance in all text frames as per RFC 6455.',
             'affected_url': ws_url,
             'impact': 'Binary data in text frames can crash UTF-8 decoders or lead to logic bugs in logging, auth, or sanitization layers.'
-        } if response else None
+        } if response else {'name': 'Binary as Text', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Binary-as-text test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Binary as Text', 'risk': 'No'}
 
 
 def test_text_as_binary(ws_url):
@@ -1348,11 +1347,10 @@ def test_text_as_binary(ws_url):
             'solution': 'Handle binary and text frames with separate logic as per RFC 6455.',
             'affected_url': ws_url,
             'impact': 'Frame type confusion may lead to parsing errors, logging bugs, or misrouted messages.'
-        } if response else None
+        } if response else {'name': 'Text as Binary', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Text-as-binary test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Text as Binary', 'risk': 'No'}
 
 
 def test_invalid_close_code(ws_url):
@@ -1380,14 +1378,13 @@ def test_invalid_close_code(ws_url):
             'name': 'Invalid Close Code',
             'risk': 'Medium',
             'description': f"WebSocket at {ws_url} accepted a close frame with invalid code 999.",
-            'solution': 'Close codes must conform to RFC 6455 (valid: 1000–1015, 3000–4999).',
+            'solution': 'Close codes must conform to RFC 6455 (valid: 1000-1015, 3000-4999).',
             'affected_url': ws_url,
             'impact': 'Invalid codes may cause parser errors or incorrect shutdown logic.'
-        } if response else None
+        } if response else {'name': 'Invalid Close Code', 'risk': 'No'}
 
-    except Exception as e:
-        print(colored(f"[ERROR] Invalid close code test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except Exception:
+        return {'name': 'Invalid Close Code', 'risk': 'No'}
 
 
 def test_early_close_frame(ws_url):
@@ -1427,11 +1424,10 @@ def test_early_close_frame(ws_url):
             'solution': 'Gracefully handle close frames sent immediately after handshake.',
             'affected_url': ws_url,
             'impact': 'Unexpected early closes may cause resource leaks or state desyncs if not handled correctly.'
-        } if response else None
+        } if response else {'name': 'Early Close Frame', 'risk': 'No'}
 
-    except WebSocketException as e:
-        print(colored(f"[ERROR] Early close frame test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except WebSocketException:
+        return {'name': 'Early Close Frame', 'risk': 'No'}
 
 
 def test_no_close_frame(ws_url):
@@ -1460,11 +1456,10 @@ def test_no_close_frame(ws_url):
             'solution': 'Ensure that server detects and cleans up on ungraceful disconnects.',
             'affected_url': ws_url,
             'impact': 'Abrupt closures (without a close frame) may leave sessions open or leak memory.'
-        } if response else None
+        } if response else {'name': 'No Close Frame', 'risk': 'No'}
 
-    except WebSocketException as e:
-        print(colored(f"[ERROR] No close frame test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except WebSocketException:
+        return {'name': 'No Close Frame', 'risk': 'No'}
 
 def test_long_close_reason(ws_url):
     """Test long close reason (max allowed by spec — 123 bytes) (Vuln #40)."""
@@ -1493,11 +1488,10 @@ def test_long_close_reason(ws_url):
             'solution': 'Enforce strict limits on close reason size (≤123 bytes).',
             'affected_url': ws_url,
             'impact': 'Overly long reasons may stress server logs, cause parsing failures, or lead to DoS.'
-        } if response else None
+        } if response else {'name': 'Long Close Reason', 'risk': 'No'}
 
-    except WebSocketException as e:
-        print(colored(f"[ERROR] Long close reason test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except WebSocketException:
+        return {'name': 'Long Close Reason', 'risk': 'No'}
 
 
 def test_no_session_cookie(ws_url):
@@ -1519,12 +1513,10 @@ def test_no_session_cookie(ws_url):
         'affected_url': ws_url,
         'impact': 'Unauthenticated users can establish WebSocket sessions, exposing sensitive data.'
         }
-    except WebSocketException as e:
-        print(colored(f"No session cookie test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except WebSocketException:
+        return {'name': 'No Session Cookie', 'risk': 'No'}
     except Exception as e:
-        print(colored(f"Unexpected error during no session cookie test for {ws_url}: {e}", "yellow"))
-        return None
+        return {'name': 'No Session Cookie', 'risk': 'No'}
 
 def test_expired_cookie(ws_url):
     """Test if WebSocket accepts connections with an expired session cookie (Vuln #42)."""
@@ -1546,12 +1538,10 @@ def test_expired_cookie(ws_url):
         'affected_url': ws_url,
         'impact': 'Expired sessions may be reused by attackers, leading to unauthorized access.'
         }
-    except WebSocketException as e:
-        print(colored(f"Expired cookie test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except WebSocketException:
+        return {'name': 'Expired Cookie', 'risk': 'No'}
     except Exception as e:
-        print(colored(f"Unexpected error during expired cookie test for {ws_url}: {e}", "yellow"))
-        return None
+        return {'name': 'Expired Cookie', 'risk': 'No'}
 
 def test_fake_token(ws_url):
     """Test if WebSocket accepts connections with a fake authentication token (Vuln #43)."""
@@ -1573,9 +1563,8 @@ def test_fake_token(ws_url):
             'impact': 'Fake tokens can lead to unauthorized access, impersonation, or escalation.'
         }
 
-    except WebSocketException as e:
-        print(colored(f"Fake token test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except WebSocketException:
+        return {'name': 'Fake Token', 'risk': 'No'}
 
 def test_http_session_reuse(ws_url):
     """Test if HTTP session cookie is reused for WebSocket without revalidation (Vuln #44)."""
@@ -1589,8 +1578,7 @@ def test_http_session_reuse(ws_url):
         response = session.get(http_url, timeout=5)
         cookies = session.cookies.get_dict()
         if not cookies:
-            print(colored(f"No cookies found on HTTP response from {http_url}.", "yellow"))
-            return None
+            return {'name': 'HTTP Session Reuse', 'risk': 'No'}
 
         # 3. Convert cookies to WebSocket-compatible header
         cookie_str = "; ".join([f"{k}={v}" for k, v in cookies.items()])
@@ -1613,8 +1601,7 @@ def test_http_session_reuse(ws_url):
         }
 
     except (WebSocketException, requests.RequestException) as e:
-        print(colored(f"HTTP session reuse test failed for {ws_url}: {e}", "yellow"))
-        return None
+        return {'name': 'HTTP Session Reuse', 'risk': 'No'}
 
 def test_stale_session_reconnect(ws_url):
     """Test if WebSocket allows reconnection with a stale session (Vuln #45)."""
@@ -1649,8 +1636,7 @@ def test_stale_session_reconnect(ws_url):
         }
 
     except WebSocketException as e:
-        print(colored(f"Stale session reconnect test failed for {ws_url}: {e}", "yellow"))
-        return None
+        return {'name': 'Stale Session Reconnect', 'risk': 'No'}
 
 def test_cross_site_cookie_hijack(ws_url):
     """Test if WebSocket accepts cookies from a different origin (Vuln #46)."""
@@ -1677,14 +1663,16 @@ def test_cross_site_cookie_hijack(ws_url):
         }
 
     except WebSocketException as e:
-        print(colored(f"Cross-site cookie hijack test failed for {ws_url}: {e}", "yellow"))
-        return None
+        return {'name': 'Cross-Site Cookie Hijack', 'risk': 'No'}
     
 def test_invalid_subprotocol(ws_url):
     """Test if WebSocket accepts an invalid subprotocol (Vuln #47)."""
     try:
         ws = create_connection(ws_url, subprotocols=["invalid..protocol"], timeout=5)
-        selected = ws.sock.selected_subprotocol
+        
+        # Use the correct attribute and safely handle None
+        selected = getattr(ws, 'subprotocol', None)
+
         ws.send("test")
         _ = ws.recv()
         ws.close()
@@ -1699,18 +1687,22 @@ def test_invalid_subprotocol(ws_url):
                 'impact': 'Invalid subprotocols can lead to parser confusion, downgrade attacks, or misbehavior.'
             }
         else:
-            return None  # No vulnerability: server ignored the invalid subprotocol
+            return {'name': 'Invalid Subprotocol', 'risk': 'No'}  # No vulnerability: server ignored the invalid subprotocol
 
-    except WebSocketException as e:
-        print(colored(f"Invalid subprotocol test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except WebSocketException:
+        return {'name': 'Invalid Subprotocol', 'risk': 'No'}
+
+from websocket import create_connection, WebSocketException
 
 def test_conflicting_subprotocols(ws_url):
     """Test if WebSocket server accepts conflicting or duplicate subprotocols (Vuln #48)."""
     try:
-        # Pass multiple distinct subprotocols
+        # Pass multiple distinct subprotocols (with a duplicate)
         ws = create_connection(ws_url, subprotocols=["chat", "stream", "chat"], timeout=5)
-        selected = ws.sock.selected_subprotocol
+        
+        # Use safe access
+        selected = getattr(ws, 'subprotocol', None)
+
         ws.send("test")
         _ = ws.recv()
         ws.close()
@@ -1725,17 +1717,22 @@ def test_conflicting_subprotocols(ws_url):
                 'impact': 'Conflicting subprotocols can cause logic confusion or downgrade vulnerabilities.'
             }
 
-        return None  # No conflict detected if server negotiated cleanly
+        return {'name': 'Conflicting Subprotocols', 'risk': 'No'}
 
-    except WebSocketException as e:
-        print(colored(f"Conflicting subprotocols test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except WebSocketException:
+        return {'name': 'Conflicting Subprotocols', 'risk': 'No'}
+
+
+from websocket import create_connection, WebSocketException
 
 def test_unaccepted_subprotocol(ws_url):
     """Test if WebSocket server accepts an unadvertised subprotocol (Vuln #49)."""
     try:
         ws = create_connection(ws_url, subprotocols=["unadvertised_protocol"], timeout=5)
-        negotiated = ws.sock.selected_subprotocol
+
+        # Use safe attribute
+        negotiated = getattr(ws, 'subprotocol', None)
+
         ws.send("test")
         _ = ws.recv()
         ws.close()
@@ -1750,17 +1747,14 @@ def test_unaccepted_subprotocol(ws_url):
                 'impact': 'Unadvertised subprotocols can allow unintended parsing or behavior (e.g., logic injection).'
             }
         else:
-            return None  # Server correctly ignored the bogus subprotocol
+            return {'name': 'Unaccepted Subprotocol', 'risk': 'No'}
 
-    except WebSocketException as e:
-        print(colored(f"Unaccepted subprotocol test failed for {ws_url}: {e}", "yellow"))
-        return None
+    except WebSocketException:
+        return {'name': 'Unaccepted Subprotocol', 'risk': 'No'}
+
 
 def test_fake_extension(host, port, path="/"):
     """Test if WebSocket accepts a fake extension (Vuln #50)."""
-    from base64 import b64encode
-    import socket
-    import ssl
 
     key = b64encode(b"1234567890123456").decode()
     request = (
@@ -1793,12 +1787,10 @@ def test_fake_extension(host, port, path="/"):
                 'affected_host': f"{host}:{port}{path}",
                 'impact': 'Fake extensions can lead to parser confusion or misbehavior.'
             }
-        return None
+        return {'name': 'Fake Extension', 'risk': 'No'}
     except Exception as e:
         print(f"[!] Fake extension test failed for {host}:{port}: {e}")
-        return None
-
-from base64 import b64encode
+        return {'name': 'Fake Extension', 'risk': 'No'}
 
 def test_conflicting_extensions(host, port, path="/"):
     """Test if WebSocket accepts conflicting extensions (Vuln #51)."""
@@ -1826,7 +1818,7 @@ def test_conflicting_extensions(host, port, path="/"):
             'impact': 'Conflicting extensions can cause protocol errors.'
         }
 
-    return None
+    return {'name': 'Conflicting Extensions', 'risk': 'No'}
 
 def test_spoofed_connection_header(host, port, path="/"):
     """Test if WebSocket accepts a spoofed Connection header (Vuln #52)."""
@@ -1861,10 +1853,9 @@ def test_spoofed_connection_header(host, port, path="/"):
                 'impact': 'Spoofed headers can bypass upgrade validation or confuse reverse proxies.'
             }
 
-        return None
+        return {'name': 'Spoofed Connection Header', 'risk': 'No'}
     except Exception as e:
-        print(colored(f"Spoofed Connection header test failed for {host}:{port}{path}: {e}", "yellow"))
-        return None
+                return {'name': 'Spoofed Connection Header', 'risk': 'No'}
 
 def test_http_1_0_downgrade(host, port, path="/"):
     """Test if WebSocket accepts HTTP/1.0 handshake (Vuln #53)."""
@@ -1900,11 +1891,10 @@ def test_http_1_0_downgrade(host, port, path="/"):
                 'impact': 'Accepting HTTP/1.0 WebSocket handshakes can lead to protocol confusion and security issues.'
             }
 
-        return None
+        return {'name': 'HTTP/1.0 Downgrade', 'risk': 'No'}
 
     except Exception as e:
-        print(colored(f"HTTP/1.0 downgrade test failed for {host}:{port}{path}: {e}", "yellow"))
-        return None
+                return {'name': 'HTTP/1.0 Downgrade', 'risk': 'No'}
 
 def test_tls_downgrade(ws_url):
     """Test if WebSocket allows downgrade to insecure TLS versions (Vuln #54)."""
@@ -1917,8 +1907,7 @@ def test_tls_downgrade(ws_url):
         try:
             context = ssl.SSLContext(ssl.PROTOCOL_TLSv1)  # Force TLS 1.0 (insecure)
         except ValueError as e:
-            print(colored(f"TLS downgrade test skipped for {ws_url}: TLS 1.0 not supported in this environment ({e}).", "yellow"))
-            return None
+                        return {'name': 'TLS Downgrade', 'risk': 'No'}
 
         context.verify_mode = ssl.CERT_NONE
         ws = WebSocket(sslopt={"context": context})
@@ -1935,14 +1924,11 @@ def test_tls_downgrade(ws_url):
             'impact': 'Insecure TLS versions are vulnerable to attacks like POODLE.'
         }
     except WebSocketException as e:
-        print(colored(f"TLS downgrade test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'TLS Downgrade', 'risk': 'No'}
     except ssl.SSLError as e:
-        print(colored(f"TLS downgrade test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'TLS Downgrade', 'risk': 'No'}
     except Exception as e:
-        print(colored(f"TLS downgrade test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return None
     
 def test_insecure_cipher(ws_url):
     """Test if WebSocket accepts insecure ciphers (Vuln #54: Weak TLS Ciphers)."""
@@ -1991,12 +1977,10 @@ def test_insecure_cipher(ws_url):
             }
 
         else:
-            print(colored(f"Insecure cipher test passed (server rejected all weak ciphers) for {ws_url}", "green"))
-            return None
+                        return {'name': 'Weak TLS Ciphers', 'risk': 'No'}
 
     except Exception as e:
-        print(colored(f"Insecure cipher test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Weak TLS Ciphers', 'risk': 'No'}
     
 def test_certificate_mismatch(ws_url):
     """Test if WebSocket endpoint's certificate matches the domain (Vuln #56)."""
@@ -2015,7 +1999,7 @@ def test_certificate_mismatch(ws_url):
                 cert = ssock.getpeercert()
                 # Check if the certificate matches the hostname
                 ssl.match_hostname(cert, host)
-        return None  # If no exception, certificate is valid
+        return {'name': 'Certificate Mismatch', 'risk': 'No'}  # If no exception, certificate is valid
     except ssl.SSLCertVerificationError as e:
         return {
             'name': 'Certificate Mismatch',
@@ -2026,8 +2010,7 @@ def test_certificate_mismatch(ws_url):
             'impact': 'Certificate mismatches can allow man-in-the-middle attacks.'
         }
     except Exception as e:
-        print(colored(f"Certificate mismatch test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Certificate Mismatch', 'risk': 'No'}
     
 def test_connection_flood(ws_url):
     """Test if WebSocket server handles rapid concurrent connection flooding (Vuln #56)."""
@@ -2068,8 +2051,7 @@ def test_connection_flood(ws_url):
             'impact': 'Connection floods can exhaust server memory and sockets, causing DoS.'
         }
     else:
-        print(colored(f"Connection flood limited or partially blocked at {ws_url} — {successful} successful, {failed} failed.", "green"))
-        return None
+                return {'name': 'Connection Flood', 'risk': 'No'}
 
 def test_oversized_message(ws_url):
     """Test if WebSocket accepts oversized messages (Vuln #57)."""
@@ -2093,8 +2075,7 @@ def test_oversized_message(ws_url):
             'impact': f"Large payloads like 10MB can cause memory exhaustion or DoS. Server echoed {echoed} bytes.",
         }
     except (WebSocketException, ssl.SSLError, socket.error) as e:
-        print(colored(f"Oversized message test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Oversized Message', 'risk': 'No'}
     finally:
         try:
             if ws:
@@ -2114,8 +2095,7 @@ def test_max_connections(ws_url):
             connections.append(ws)
             success_count += 1
     except (WebSocketException, ssl.SSLError, socket.error) as e:
-        print(colored(f"Max connections test interrupted at {success_count}/{max_attempts}: {e}", "yellow"))
-
+        return {'name': 'Max Connections', 'risk': 'No'}
     finally:
         for ws in connections:
             try:
@@ -2134,15 +2114,7 @@ def test_max_connections(ws_url):
             'notes': f"{success_count} connections opened successfully. No limit detected."
         }
     else:
-        return {
-            'name': 'Max Connections',
-            'risk': 'Low',
-            'description': f"WebSocket at {ws_url} closed connections after {success_count} attempts.",
-            'solution': 'Monitor and cap connection limits to defend against abuse.',
-            'affected_url': ws_url,
-            'impact': 'Connection limit enforced after some threshold.',
-            'notes': f"{success_count} connections succeeded before server rejected new ones."
-        }
+        return {'name': 'Max Connections', 'risk': 'No'}
 
 def test_idle_timeout_abuse(ws_url):
     """Test if WebSocket server allows idle connections to persist (Vuln #60)."""
@@ -2164,11 +2136,9 @@ def test_idle_timeout_abuse(ws_url):
             'impact': 'Idle connections can tie up server resources, enabling DoS.'
         }
     except WebSocketException as e:
-        print(colored(f"Idle timeout abuse test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Idle Timeout Abuse', 'risk': 'No'}
     except Exception as e:
-        print(colored(f"Unexpected error during idle timeout test for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Idle Timeout Abuse', 'risk': 'No'}
     finally:
         try:
             if ws:
@@ -2200,8 +2170,9 @@ def test_no_compression_negotiation(ws_url):
         }
 
     except (WebSocketException, ssl.SSLError, socket.error) as e:
-        print(colored(f"No compression negotiation test failed for {ws_url}: {e}", "yellow"))
-        return None
+        return {'name': 'No Compression Negotiation', 'risk': 'No'}
+    except:
+        return {'name': 'No Compression Negotiation', 'risk': 'No'}
 
 def test_high_compression_ratio(ws_url):
     """Test if WebSocket server handles high compression ratio messages (Vuln #62)."""
@@ -2229,14 +2200,10 @@ def test_high_compression_ratio(ws_url):
         }
 
     except (WebSocketException, ssl.SSLError, socket.error, ConnectionResetError, BrokenPipeError) as e:
-        print(colored(f"High compression ratio test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'High Compression Ratio', 'risk': 'No'}
     
-def test_resource_leak(ws_url):
-    """Test if WebSocket connection causes resource leaks (Vuln #63)."""
-    results = []
-
-    # Part 1: Send large messages repeatedly
+def test_large_payload_leak(ws_url):
+    """Test if server accepts large repeated messages without closing (Part of Resource Leak)."""
     try:
         ws = WebSocket()
         ws.connect(ws_url, timeout=5)
@@ -2245,18 +2212,20 @@ def test_resource_leak(ws_url):
             time.sleep(0.1)
         ws.close()
 
-        results.append({
-            'name': 'Resource Leak - Message Flood',
+        return {
+            'name': 'Large Payload Resource Leak',
             'risk': 'High',
             'description': f"WebSocket at {ws_url} accepted repeated large messages without closing.",
             'solution': 'Set server-side limits for message size and rate. Monitor memory usage.',
             'affected_url': ws_url,
             'impact': 'Excessive memory allocation can exhaust server RAM over time.'
-        })
-    except WebSocketException as e:
-        print(colored(f"Message flood test failed for {ws_url}: {e}", "yellow"))
+        }
+    except Exception:
+        return {'name': 'Large Payload Resource Leak', 'risk': 'No'}
 
-    # Part 2: Simulate unclosed socket connections
+
+def test_socket_leak_on_half_open(ws_url):
+    """Test if server allows hanging sockets without timeouts (Part of Resource Leak)."""
     parsed = urlparse(ws_url)
     hostname = parsed.hostname
     port = parsed.port or (443 if parsed.scheme == 'wss' else 80)
@@ -2270,24 +2239,16 @@ def test_resource_leak(ws_url):
             time.sleep(0.5)  # Simulate hanging socket
             sock.close()
         except ssl.SSLError as e:
-            # Expected for incomplete handshakes
-            if "EOF occurred in violation of protocol" in str(e):
-                pass  # Silently ignore
-            else:
-                print(colored(f"SSL error: {e}", "yellow"))
-        except Exception as e:
-            print(colored(f"Socket simulation failed: {e}", "yellow"))
+            return {'name':'TCP Half-Open Resource Leak','risk':'No'}  # Expected for incomplete handshake
 
-    results.append({
-        'name': 'Resource Leak - Hanging Sockets',
+    return {
+        'name': 'TCP Half-Open Resource Leak',
         'risk': 'High',
         'description': f"WebSocket at {ws_url} accepted hanging TCP connections without timeout.",
         'solution': 'Use TCP keep-alive and server-side timeout policies.',
         'affected_url': ws_url,
         'impact': 'Leaked descriptors may degrade server over time or cause exhaustion.'
-    })
-
-    return results if results else None
+    }
 
 def test_no_timeout_policy(ws_url):
     """Test if WebSocket server lacks a connection timeout policy (Vuln #64)."""
@@ -2310,28 +2271,23 @@ def test_no_timeout_policy(ws_url):
             }
         except (WebSocketException, ssl.SSLError, socket.error) as e:
             # Server closed connection = GOOD (has timeout)
-            print(colored(f"Idle timeout detected — server closed idle connection: {e}", "green"))
-            return None
+                        return {'name': 'No Timeout Policy', 'risk': 'No'}
 
     except (WebSocketException, ssl.SSLError, socket.error) as e:
-        print(colored(f"No timeout policy test failed to connect: {e}", "yellow"))
-        return None
+                return {'name': 'No Timeout Policy', 'risk': 'No'}
     finally:
         try:
             if ws:
                 ws.close()
+                return {'name': 'No Timeout Policy', 'risk': 'No'}
         except:
-            pass
+            return {'name': 'No Timeout Policy', 'risk': 'No'}
 
 # Cross-Origin & Mixed Content (Vuln #65-69)
 
 def test_missing_cors_headers(ws_url):
     """Test if WebSocket endpoint lacks CORS headers (Vuln #65)."""
     try:
-        from urllib.parse import urlparse
-        import requests
-        from termcolor import colored
-
         parsed_url = urlparse(ws_url)
         http_url = f"{'https' if parsed_url.scheme == 'wss' else 'http'}://{parsed_url.netloc}/"
         headers = {"Origin": "http://malicious.com"}
@@ -2348,10 +2304,9 @@ def test_missing_cors_headers(ws_url):
                 'affected_url': http_url,
                 'impact': 'Missing or misconfigured CORS headers can lead to unauthorized cross-origin requests.'
             }
-        return None
+        return  {'name': 'Missing CORS Headers', 'risk': 'No'}
     except requests.RequestException as e:
-        print(colored(f"Missing CORS headers test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return  {'name': 'Missing CORS Headers', 'risk': 'No'}
 
 def test_cross_origin_iframe(ws_url):
     """Test if WebSocket endpoint allows cross-origin iframe embedding (Vuln #66)."""
@@ -2378,11 +2333,10 @@ def test_cross_origin_iframe(ws_url):
             'impact': 'Lack of iframe restrictions enables clickjacking and session abuse via embedded WebSocket clients.'
             }
 
-        return None
+        return {'name': 'Cross-Origin Iframe', 'risk': 'No'}
 
     except requests.RequestException as e:
-        print(colored(f"Cross-origin iframe test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Cross-Origin Iframe', 'risk': 'No'}
 
 def test_mixed_content(ws_url):
     """Test if WebSocket frontend loads insecure ws:// connections inside an https:// page (Vuln #67)."""
@@ -2408,11 +2362,10 @@ def test_mixed_content(ws_url):
                 'impact': 'Mixed content exposes users to downgrade/MITM attacks and breaks secure context assumptions.'
                 }
 
-        return None
+        return {'name': 'Mixed Content', 'risk': 'No'}
 
     except requests.RequestException as e:
-        print(colored(f"Mixed content test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Mixed Content', 'risk': 'No'}
 
 def test_postmessage_abuse(ws_url):
     """Test if WebSocket endpoint is vulnerable to postMessage abuse (Vuln #68)."""
@@ -2432,10 +2385,9 @@ def test_postmessage_abuse(ws_url):
                     'affected_url': http_url,
                     'impact': 'PostMessage abuse can allow cross-origin data leakage or script execution.'
                 }
-        return None
+        return {'name': 'PostMessage Abuse', 'risk': 'No'}
     except requests.RequestException as e:
-        print(colored(f"PostMessage abuse test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'PostMessage Abuse', 'risk': 'No'}
 
 def test_spoofed_url(ws_url):
     """Test if WebSocket endpoint allows spoofed URLs (Vuln #69)."""
@@ -2455,10 +2407,9 @@ def test_spoofed_url(ws_url):
                 'affected_url': http_url,
                 'impact': 'Spoofed URLs can be used for phishing or redirection attacks.'
             }
-        return None
+        return {'name': 'Spoofed URL', 'risk': 'No'}
     except requests.RequestException as e:
-        print(colored(f"Spoofed URL test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Spoofed URL', 'risk': 'No'}
 
 
 # Other Vulnerabilities (Vuln #70-75)
@@ -2479,10 +2430,9 @@ def test_error_message_leak(ws_url):
                 'affected_url': ws_url,
                 'impact': 'Error message leaks can expose server details to attackers.'
             }
-        return None
+        return {'name': 'Error Message Leak', 'risk': 'No'}
     except WebSocketException as e:
-        print(colored(f"Error message leak test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Error Message Leak', 'risk': 'No'}
 
 def test_server_disclosure(ws_url):
     """Test if WebSocket server discloses platform/framework/version info (Vuln #71)."""
@@ -2514,11 +2464,10 @@ def test_server_disclosure(ws_url):
             'affected_url': http_url,
             'impact': 'Disclosed server info enables attackers to craft tech-specific exploits.'
             }
-        return None
+        return {'name': 'Server Disclosure', 'risk': 'No'}
 
     except requests.RequestException as e:
-        print(colored(f"Server disclosure test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Server Disclosure', 'risk': 'No'}
 
 def test_invalid_content_type(ws_url):
     """Test if WebSocket endpoint serves invalid Content-Type (Vuln #72)."""
@@ -2537,10 +2486,9 @@ def test_invalid_content_type(ws_url):
                 'affected_url': http_url,
                 'impact': 'Invalid Content-Type can confuse clients or enable XSS attacks.'
             }
-        return None
+        return {'name': 'Invalid Content-Type', 'risk': 'No'}
     except requests.RequestException as e:
-        print(colored(f"Invalid Content-Type test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Invalid Content-Type', 'risk': 'No'}
 
 def test_missing_security_headers(ws_url):
     """Test if WebSocket endpoint lacks key security headers (Vuln #73)."""
@@ -2572,11 +2520,10 @@ def test_missing_security_headers(ws_url):
             'affected_url': http_url,
             'impact': 'Missing security headers can allow framing attacks, downgrade vulnerabilities, or mixed content issues.'
             }
-        return None
+        return {'name': 'Missing Security Headers', 'risk': 'No'}
 
     except requests.RequestException as e:
-        print(colored(f"Missing security headers test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Missing Security Headers', 'risk': 'No'}
 
 def test_url_path_traversal(ws_url):
     """Test for path traversal by manipulating WebSocket path (Vuln #74)."""
@@ -2595,7 +2542,7 @@ def test_url_path_traversal(ws_url):
             'impact': 'May allow unauthorized access to internal/admin WebSocket paths.'
         }
     except Exception as e:
-        return None
+        return {'name': 'URL Path Traversal', 'risk': 'No'}
     
 def compact_url(url):
     if "?" not in url:
@@ -2624,111 +2571,111 @@ def test_query_parameter_flood(ws_url):
             'impact': 'May cause resource exhaustion and DoS conditions.'
         }
     except Exception as e:
-        print(colored(f"Query parameter flood test failed for {ws_url}: {e}", "yellow"))
-        return None
+                return {'name': 'Query Parameter Flood', 'risk': 'No'}
     
 # 🔒 Handshake & Protocol Validation
 handshake_tests = [
-    test_omit_sec_websocket_key,  # 3
-    test_non_base64_sec_websocket_key,  # 4
-    test_oversized_sec_websocket_key,  # 5
-    test_duplicate_sec_websocket_key,  # 6
-    test_missing_sec_websocket_version,  # 7
-    test_invalid_sec_websocket_version,  # 8
-    test_conflicting_sec_websocket_version,  # 9
-    test_wrong_upgrade_header,  # 10
-    test_missing_connection_header,  # 11
-    test_case_sensitive_headers,  # 12
-    test_non_get_method,  # 13
-    test_fake_http_status,  # 14
-    test_wrong_sec_websocket_accept,  # 15 
-    test_oversized_headers,  # 16
-    test_missing_host_header,  # 17
-    test_fake_host_header,  # 18
-    test_multiple_host_headers,  # 19
-    test_long_url_path,  # 20
-    test_unicode_url,  # 21
-    test_http_0_9_handshake,  # 22
+    test_omit_sec_websocket_key,                # 3
+    test_non_base64_sec_websocket_key,          # 4
+    test_oversized_sec_websocket_key,           # 5
+    test_duplicate_sec_websocket_key,           # 6
+    test_missing_sec_websocket_version,         # 7
+    test_invalid_sec_websocket_version,         # 8
+    test_conflicting_sec_websocket_version,     # 9
+    test_wrong_upgrade_header,      # 10
+    test_missing_connection_header, # 11
+    test_case_sensitive_headers,    # 12
+    test_non_get_method,            # 13
+    test_fake_http_status,          # 14
+    test_wrong_sec_websocket_accept,# 15 
+    test_oversized_headers,         # 16
+    test_missing_host_header,       # 17
+    test_fake_host_header,          # 18
+    test_multiple_host_headers,     # 19
+    test_long_url_path,             # 20
+    test_unicode_url,               # 21
+    test_http_0_9_handshake,        # 22
 ]
 # 🔓 Authentication, Sessions & Identity Control
 auth_session_tests = [
-    test_no_session_cookie,  # 23
-    test_expired_cookie,  # 24
-    test_fake_token,  # 25
-    test_http_session_reuse,  # 26
-    test_stale_session_reconnect,  # 27
+    test_no_session_cookie,         # 23
+    test_expired_cookie,            # 24
+    test_fake_token,                # 25
+    test_http_session_reuse,        # 26
+    test_stale_session_reconnect,   # 27
     test_cross_site_cookie_hijack,  # 28
-    test_authentication     #29
+    test_authentication             # 29
 ]
 # 🗂 Subprotocol & Extension Negotiation
 ws_subprotocol_tests = [
-    test_invalid_subprotocol,  # 30
+    test_invalid_subprotocol,       # 30
     test_conflicting_subprotocols,  # 31
-    test_unaccepted_subprotocol,  # 32
+    test_unaccepted_subprotocol,    # 32
 ]
 subprotocol_tests = [
-    test_fake_extension,  # 33
-    test_conflicting_extensions,  # 34
+    test_fake_extension,            # 33
+    test_conflicting_extensions,    # 34
 ]
 # ⚡ Transport Security & Encryption
 security_tests = [
-    test_spoofed_connection_header,  # 35
-    test_http_1_0_downgrade,  # 36
+    test_spoofed_connection_header, # 35
+    test_http_1_0_downgrade,        # 36
 ]
 ws_security_tests = [
-    test_tls_downgrade,  # 37
-    test_insecure_cipher,  # 38
-    test_certificate_mismatch,  # 39
+    test_tls_downgrade,             # 37
+    test_insecure_cipher,           # 38
+    test_certificate_mismatch,      # 39
 ]
 # 📦 Payload Handling & Fragmentation
 payload_tests = [
-    test_undefined_opcode,  # 40
-    test_reserved_opcode,  # 41
-    test_zero_length_fragment,  # 42
-    test_invalid_payload_length,  # 43
-    test_negative_payload_length,  # 44
-    test_mismatched_payload,  # 45
-    test_invalid_masking_key,  # 46
-    test_unmasked_client_frame,  # 47
-    test_invalid_rsv_bits,  # 48
-    test_oversized_control_frame,  # 49
-    test_non_utf8_text,  # 50
-    test_null_bytes_in_text,  # 51
-    test_binary_as_text,  # 52
-    test_text_as_binary,  # 53
-    test_invalid_close_code,  # 54
-    test_early_close_frame,  # 55
-    test_no_close_frame,  # 56
-    test_long_close_reason,  # 57
+    test_undefined_opcode,          # 40
+    test_reserved_opcode,           # 41
+    test_zero_length_fragment,      # 42
+    test_invalid_payload_length,    # 43
+    test_negative_payload_length,   # 44
+    test_mismatched_payload,        # 45
+    test_invalid_masking_key,       # 46
+    test_unmasked_client_frame,     # 47
+    test_invalid_rsv_bits,          # 48
+    test_oversized_control_frame,   # 49
+    test_non_utf8_text,             # 50
+    test_null_bytes_in_text,        # 51
+    test_binary_as_text,            # 52
+    test_text_as_binary,            # 53
+    test_invalid_close_code,        # 54
+    test_early_close_frame,         # 55
+    test_no_close_frame,            # 56
+    test_long_close_reason,         # 57
 ]
 # 🌍 Cross-Origin Policy & Browser-Side Risks
 cross_origin_tests = [
-    test_missing_cors_headers,  # 58
-    test_cross_origin_iframe,  # 59
-    test_mixed_content,  # 60
-    test_postmessage_abuse,  # 61
-    test_spoofed_url,  # 62
-    test_origin_check   #63
+    test_missing_cors_headers,      # 58
+    test_cross_origin_iframe,       # 59
+    test_mixed_content,             # 60
+    test_postmessage_abuse,         # 61
+    test_spoofed_url,               # 62
+    test_origin_check               # 63
 ]
 # 🛡 Application-Layer Vulnerabilities
 ws_app_tests = [
-    test_error_message_leak,  # 64
-    test_server_disclosure,  # 65
-    test_invalid_content_type,  # 66
+    test_error_message_leak,        # 64
+    test_server_disclosure,         # 65
+    test_invalid_content_type,      # 66
     test_missing_security_headers,  # 67
-    test_url_path_traversal,  # 68
-    test_query_parameter_flood,  # 69
+    test_url_path_traversal,        # 68
+    test_query_parameter_flood,     # 69
 ]
 # ⚠ DoS, Compression & Resource Limits
 ws_dos_tests = [
-    test_connection_flood,  # 70
-    test_oversized_message,  # 71
-    test_max_connections,  # 72
-    test_idle_timeout_abuse,  # 73
-    test_high_compression_ratio,  # 74
-    test_resource_leak,  # 75
-    test_no_compression_negotiation,  # 76
-    test_no_timeout_policy,  # 77
+    test_connection_flood,          # 70
+    test_oversized_message,         # 71
+    test_max_connections,           # 72
+    test_idle_timeout_abuse,        # 73
+    test_high_compression_ratio,    # 74
+    test_large_payload_leak,        # 75
+    test_socket_leak_on_half_open,  # 76
+    test_no_compression_negotiation,# 77
+    test_no_timeout_policy,         # 78
 ]
 # def perform_websocket_tests(websocket_urls, payloads):
 #     """Perform WebSocket security tests."""
@@ -2965,14 +2912,12 @@ def perform_websocket_tests(key, websocket_urls, payloads):
             res = test_func(ws_url)
             if res: vulnerabilities.append(res); local_di["Authentication & Session Control"] += (1 if res.get('risk') != 'No' else 0)
 
-        # Run tests that take only ws_url
         for test_func in ws_subprotocol_tests:
             res = test_func(ws_url)
             if res:
                 vulnerabilities.append(res)
                 local_di["Subprotocols & Extension Handling"] += (1 if res.get('risk') != 'No' else 0)
 
-        # Run tests that take host, port, path
         for test_func in subprotocol_tests:
             res = test_func(host, port, path)
             if res:
@@ -2998,18 +2943,18 @@ def perform_websocket_tests(key, websocket_urls, payloads):
         for test_func in cross_origin_tests:
             res = test_func(ws_url)
             if res: vulnerabilities.append(res); local_di["Origin Policy & Cross-Origin Enforcement"] += (1 if res.get('risk') != 'No' else 0)
-
         for test_func in ws_app_tests:
             res = test_func(ws_url)
             if res: vulnerabilities.append(res); local_di["Application-Layer Logic & Misconfigurations"] += (1 if res.get('risk') != 'No' else 0)
+        
+        for test_func in ws_dos_tests:
+            res = test_func(ws_url)
+            if res: vulnerabilities.append(res); local_di["DoS, Compression & Resource Limits"] += (1 if res.get('risk') != 'No' else 0)
 
-        # for test_func in ws_dos_tests:
-        #     res = test_func(ws_url)
-        #     if res: vulnerabilities.append(res); local_di["DoS, Compression & Resource Limits"] += (1 if res.get('risk') != 'No' else 0)
-
-        # for payload in payloads:
-        #     res = test_fuzzing(ws_url, payload)
-        #     if res: vulnerabilities.append(res); local_di["Protocol Fuzzing"] += (1 if res.get('risk') != 'No' else 0)
+        for idx,item in enumerate(payloads,1):
+            res = test_fuzzing(ws_url, item["payload"], item["name"])
+            res['name'] += f' #{idx}'
+            if res: vulnerabilities.append(res); local_di["Protocol Fuzzing"] += (1 if res.get('risk') != 'No' else 0)
 
         print(f"[{ws_url}] All tests completed.")
         return ws_url, vulnerabilities, local_di

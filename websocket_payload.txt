@@ -27,8 +27,7 @@ ${{7*7}}
 # Oversized header-like input
 {"headers": "X" * 5000}
 
-# Invalid UTF-8 sequence
-{"data": "\xFF\xFE\xFD"}
+
 
 # Empty message
 {}
@@ -63,17 +62,6 @@ Connection: Upgrade
 # Mismatched payload (Vuln #28) - Protocol Fuzzing
 \x81\x04testtest
 
-# Invalid masking key (Vuln #29) - Protocol Fuzzing
-\x81\x84\x00\x00\x00\x00test
-
-# Unmasked client frame (Vuln #30) - Protocol Fuzzing
-\x81\x04test
-
-# Invalid RSV bits (Vuln #31) - Protocol Fuzzing
-\xC1\x04test
-
-# Oversized control frame (Vuln #32) - Protocol Fuzzing
-\x89\x7E\x00\x7EAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 
 # Non-UTF-8 text (Vuln #33) - Protocol Fuzzing
 \x81\x02\xFF\xFF

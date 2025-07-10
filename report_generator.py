@@ -185,7 +185,7 @@ ATTACK_LIST = [
     "HTTP Session Reuse",                    # 26
     "Stale Session Reconnect",               # 27
     "Cross-Site Cookie Hijack",              # 28
-    "Authentication Check",                  # 29
+    "Missing Authentication",                  # 29
 
     # 3. Subprotocols & Extension Handling
     "Invalid Subprotocol",                   # 30
@@ -227,7 +227,7 @@ ATTACK_LIST = [
     "Mixed Content",                         # 60
     "PostMessage Abuse",                     # 61
     "Spoofed URL",                           # 62
-    "Origin Check",                          # 63
+    "Missing Origin Check",                  # 63
 
     # 7. Application-Layer Logic & Misconfigurations
     "Error Message Leak",                    # 64
@@ -242,13 +242,25 @@ ATTACK_LIST = [
     "Oversized Message",                     # 71
     "Max Connections",                       # 72
     "Idle Timeout Abuse",                    # 73
-    "No Compression Negotiation",            # 74
-    "High Compression Ratio",                # 75
-    "Resource Leak",                         # 76
-    "No Timeout Policy",                     # 77
+    "High Compression Ratio",                # 74
+    "Large Payload Resource Leak",           # 75
+    "TCP Half-Open Resource Leak",           # 76
+    "No Compression Negotiation",            # 77
+    "No Timeout Policy",                     # 78
 
     # 9. Protocol Fuzzing
-    "Protocol Fuzzing"                       # 78
+    "Protocol Fuzzing #1",                      # 79
+    "Protocol Fuzzing #2",                      # 80
+    "Protocol Fuzzing #3",                      # 81
+    "Protocol Fuzzing #4",                      # 82
+    "Protocol Fuzzing #5",                      # 83
+    "Protocol Fuzzing #6",                      # 84
+    "Protocol Fuzzing #7",                      # 85
+    "Protocol Fuzzing #8",                      # 86
+    "Protocol Fuzzing #9",                      # 87
+    "Protocol Fuzzing #10",                     # 88
+    "Protocol Fuzzing #11",                     # 89
+    "Protocol Fuzzing #12",                     # 90
 ]
 
 def create_side_by_side_pies_with_legend(error_dict, attack_list, width=400, height=200):
@@ -267,16 +279,16 @@ def create_side_by_side_pies_with_legend(error_dict, attack_list, width=400, hei
 
     # === Pie 1: Attack Types by Category ===
     CATEGORY_SPLITS = {
-        "Handshake": (0, 22),
-        "Payload": (22, 40),
-        "Auth/Sessions": (40, 47),
-        "Subprotocols": (47, 52),
-        "Transport Security": (52, 57),
-        "DoS": (57, 66),
-        "Cross-Origin": (66, 72),
-        "Application": (72, 78),
-        "Fuzzing": (78,100)
-    }
+    "Handshake": (0, 22),
+    "Auth/Sessions": (40, 47),
+    "Subprotocols": (47, 52),
+    "Transport Security": (52, 57),
+    "Payload": (22, 40),
+    "Cross-Origin": (66, 72),
+    "Application": (72, 78),
+    "DoS": (57, 66),
+    "Fuzzing": (78, 90)
+    }   
     cat_labels = list(CATEGORY_SPLITS.keys())
     cat_data = [end - start for (_, (start, end)) in CATEGORY_SPLITS.items()]
 
@@ -345,7 +357,7 @@ def create_detailed_heatmap(combined_results, cell_width=5, cell_height=5, paddi
 
     for site, details in combined_results.get("detailed_results", {}).items():
         grouped_rows[site] = []
-        for ws_url, vuln_list in details.get("vulnerabilities", {}).items():
+        for vuln_list in details.get("vulnerabilities", {}).values():
             flat = flatten_vuln_list(vuln_list)
             risk_map = {}
             for v in flat:
@@ -369,10 +381,10 @@ def create_detailed_heatmap(combined_results, cell_width=5, cell_height=5, paddi
     row_idx = 0
     for site, ws_risks in grouped_rows.items():
         y = total_height - (row_idx + 2) * (cell_height + padding)
-
+        if ws_risks == []:
+            continue
         # Write website name once
         drawing.add(String(5, y + 2, site[:60], fontSize=6))
-        
         for i, risk_map in enumerate(ws_risks):
             y = total_height - (row_idx + 2) * (cell_height + padding)
 

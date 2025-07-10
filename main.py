@@ -248,7 +248,8 @@ async def main():
 
 
     # Attack phase
-    perform_attack = input(colored("\n[?] Perform WebSocket attack? (yes/no): ", "yellow")).strip().lower()
+    #perform_attack = input(colored("\n[?] Perform WebSocket attack? (yes/no): ", "yellow")).strip().lower()
+    perform_attack = 'yes'
     if perform_attack == "yes":
         print(colored("[*] Starting WebSocket attack...", "yellow"))
         try:

@@ -37,11 +37,12 @@ def pretty_print_combined_results(combined_results):
     print("\n=== Per-URL Details ===")
     for url, details in combined_results.get("detailed_results", {}).items():
         print(f"\n--- {url} ---")
-        print(f"  Crawled URLs: {details.get('num_crawled_urls', 0)}")
-        print(f"  WebSocket Endpoints: {details.get('num_websockets', 0)}")
-        print(f"  Scan Duration: {round(details.get('scan_duration', 0), 2)}s")
-        print(f"  Crawl Notes: {details.get('crawl_notes', '')}")
-
+        # print(f"  Crawled URLs: {details.get('num_crawled_urls', 0)}")
+        # print(f"  WebSocket Endpoints: {details.get('num_websockets', 0)}")
+        # print(f"  Scan Duration: {round(details.get('scan_duration', 0), 2)}s")
+        # print(f"  Crawl Notes: {details.get('crawl_notes', '')}")
+        #print("websockets:",details.get('websocket_urls'))
+        print(details.get("vulnerabilities"))
 pretty_print_combined_results(s)
 print(colored("\n[*] Generating PDF report...", "yellow"))
 try:
