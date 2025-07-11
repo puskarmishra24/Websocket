@@ -12,6 +12,7 @@ from textwrap import wrap
 import os
 from html import escape
 from reportlab.graphics.charts.piecharts import Pie
+import math
 
 def create_wrapped_cell(text, width=60):
     """Helper function to wrap and escape text in table cells"""
@@ -25,7 +26,7 @@ def create_wrapped_cell(text, width=60):
     return Paragraph(wrapped_text, ParagraphStyle('Normal'))
 
 
-def create_bar_chart(data, width=380, height=200, title="", categories=None, colors_list=None):
+def create_bar_chart(data, width=380, height=250, title="", categories=None, colors_list=None):
     """
     Create a visually responsive vertical bar chart with centered title,
     equal left/right padding, and content fitting inside.
@@ -33,7 +34,7 @@ def create_bar_chart(data, width=380, height=200, title="", categories=None, col
     left_padding = 60
     right_padding = 60
     top_padding = 30
-    bottom_padding = 40
+    bottom_padding = 50
 
     chart_width = width
     chart_height = height
@@ -57,18 +58,28 @@ def create_bar_chart(data, width=380, height=200, title="", categories=None, col
     bc.strokeColor = colors.black
 
     # Set axis value range and steps
+    
     max_val = max(max(data, default=0), 5)
+    rounded_max = math.ceil(max_val / 50) * 50
+
     bc.valueAxis.valueMin = 0
-    bc.valueAxis.valueMax = max_val + (max_val // 5) + 1
-    bc.valueAxis.valueStep = max(1, (max_val // 5))
+    bc.valueAxis.valueMax = rounded_max
+    bc.valueAxis.valueStep = 50
+
+    def wrap_label_words(text, words_per_line=2):
+        words = text.split()
+        return '\n'.join(
+            [' '.join(words[i:i+words_per_line]) for i in range(0, len(words), words_per_line)]
+        )
+    wrapped_labels = [wrap_label_words(label) for label in categories] if categories else ['High', 'Medium', 'Low']
 
     # Category labels
     bc.categoryAxis.labels.boxAnchor = 'ne'
     bc.categoryAxis.labels.dx = 6
     bc.categoryAxis.labels.dy = -2
     bc.categoryAxis.labels.angle = 30
-    bc.categoryAxis.labels.fontSize = 8
-    bc.categoryAxis.categoryNames = categories if categories else ['High', 'Medium', 'Low']
+    bc.categoryAxis.labels.fontSize = 6
+    bc.categoryAxis.categoryNames = wrapped_labels
 
     # Bar fill colors
     if colors_list:
@@ -79,6 +90,17 @@ def create_bar_chart(data, width=380, height=200, title="", categories=None, col
         bc.bars[0].fillColor = colors.red
         bc.bars[1].fillColor = colors.yellow
         bc.bars[2].fillColor = colors.green
+    # Add value labels on top of bars
+    for i, val in enumerate(data,1):
+        lbl = Label()
+        lbl.setOrigin(
+            bc.x + (bc.width/9) * i - 20,
+            bc.y + (val / bc.valueAxis.valueMax) * bc.height + 5  # Y-position slightly above the bar
+        )
+        lbl.boxAnchor = 's'
+        lbl.fontSize = 7
+        lbl.setText(str(val))
+        drawing.add(lbl)
 
     drawing.add(bc)
 
@@ -596,7 +618,6 @@ def generate_pdf_report(combined_results):
 
 #         elements.append(create_heatmap(heatmap_data))
 #         elements.append(Spacer(1, 30))
-        elements.append(PageBreak())
 
         heatmap = create_detailed_heatmap(combined_results)
         elements.append(Paragraph("WebSocket vs. Attack Heatmap", heading2_style))
@@ -636,21 +657,19 @@ def generate_pdf_report(combined_results):
             ('GRID', (0, 0), (-1, -1), 1, colors.black)
         ]))
         
-        elements.append(type_table)
+        elements.append(type_table)        
+        # Vulnerability Type Distribution Chart
+        type_counts = [v for v in vuln_types.values()]
+        type_categories = list(vuln_types.keys())
+        elements.append(create_bar_chart(
+            type_counts,
+            title="Vulnerability Distribution by Type",
+            categories=type_categories,
+            colors_list=[colors.blue] * len(type_categories),
+            height=250,
+            width=380
+        ))
         elements.append(Spacer(1, 30))
-        
-        # # Vulnerability Type Distribution Chart
-        # type_counts = [v for v in vuln_types.values()]
-        # type_categories = list(vuln_types.keys())
-        # elements.append(create_bar_chart(
-        #     type_counts,
-        #     title="Vulnerability Distribution by Type",
-        #     categories=type_categories,
-        #     colors_list=[colors.blue] * len(type_categories),
-        #     height=180,
-        #     width=380
-        # ))
-        # elements.append(Spacer(1, 30))
 
         # drawing = create_attack_type_piechart(ATTACK_LIST)
         # elements.append(Paragraph("Test Type Distribution", heading2_style))
@@ -658,6 +677,7 @@ def generate_pdf_report(combined_results):
         # drawing = create_attack_results_piechart(combined_results["dict_total_errors"])
         # elements.append(Paragraph("Attack Result Summary", heading2_style))
         # elements.append(drawing)
+        elements.append(PageBreak())
 
         elements.append(Paragraph("Test Distribution vs Results", heading2_style))
         elements.append(create_side_by_side_pies_with_legend(
