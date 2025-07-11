@@ -406,7 +406,7 @@ def create_detailed_heatmap(combined_results, cell_width=5, cell_height=5, paddi
         if ws_risks == []:
             continue
         # Write website name once
-        drawing.add(String(5, y + 2, site[:60], fontSize=6))
+        drawing.add(String(-5, y + 2, site[:60], fontSize=6))
         for i, risk_map in enumerate(ws_risks):
             y = total_height - (row_idx + 2) * (cell_height + padding)
 
@@ -424,6 +424,24 @@ def create_detailed_heatmap(combined_results, cell_width=5, cell_height=5, paddi
                 drawing.add(Rect(75 + x, y, cell_width, cell_height, fillColor=fill, strokeColor=None))
 
             row_idx += 1  # Next row
+    # Legend
+    legend_items = [
+        ("High Risk", colors.red),
+        ("Medium Risk", colors.orange),
+        ("Low Risk", colors.yellow),
+        ("No Risk", colors.green),
+        ("Test Failed", colors.black),
+    ]
+
+    legend_x = 75  # Starting X-position for legend
+    legend_y = 0 # Y-position at bottom of drawing
+    legend_spacing = 60  # Horizontal spacing between legend items
+
+    for i, (label, color) in enumerate(legend_items):
+        x_pos = legend_x + i * legend_spacing
+        drawing.add(Rect(x_pos, legend_y, 5, 5, fillColor=color, strokeColor=colors.black))
+        drawing.add(String(x_pos + 8, legend_y, label, fontSize=5, fillColor=colors.black))
+
     return drawing
 
 def generate_pdf_report(combined_results):
