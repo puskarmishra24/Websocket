@@ -1963,7 +1963,7 @@ def test_insecure_cipher(ws_url):
                 supported_cipher = cipher
                 break  # Stop at first successful connection with a weak cipher
 
-            except (WebSocketException, ssl.SSLError, socket.error):
+            except Exception:
                 continue  # Try next cipher
 
         if supported_cipher:

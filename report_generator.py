@@ -285,85 +285,6 @@ ATTACK_LIST = [
     "Protocol Fuzzing #12",                     # 90
 ]
 
-def create_side_by_side_pies_with_legend(error_dict, attack_list, width=400, height=200):
-    """
-    Draw two pie charts side by side with shared legend below.
-    Left = Attack Types (static), Right = Results (from dict_total_errors)
-    """
-    # Color palette (repeatable)
-    palette = [
-        colors.HexColor("#e41a1c"), colors.HexColor("#377eb8"),
-        colors.HexColor("#4daf4a"), colors.HexColor("#984ea3"),
-        colors.HexColor("#ff7f00"), colors.HexColor("#ffff33"),
-        colors.HexColor("#a65628"), colors.HexColor("#f781bf"),
-        colors.HexColor("#999999")
-    ]
-
-    # === Pie 1: Attack Types by Category ===
-    CATEGORY_SPLITS = {
-    "Handshake": (0, 22),
-    "Auth/Sessions": (40, 47),
-    "Subprotocols": (47, 52),
-    "Transport Security": (52, 57),
-    "Payload": (22, 40),
-    "Cross-Origin": (66, 72),
-    "Application": (72, 78),
-    "DoS": (57, 66),
-    "Fuzzing": (78, 90)
-    }   
-    cat_labels = list(CATEGORY_SPLITS.keys())
-    cat_data = [end - start for (_, (start, end)) in CATEGORY_SPLITS.items()]
-
-    # === Pie 2: Result Counts from dict_total_errors ===
-    result_labels = list(error_dict.keys())
-    result_data = list(error_dict.values())
-
-    drawing = Drawing(width, height)
-
-    pie1 = Pie()
-    pie1.x = 20
-    pie1.y = 80
-    pie1.width = 110
-    pie1.height = 110
-    pie1.data = cat_data
-    pie1.labels = []
-    total = sum(pie1.data)
-    pie1.simpleLabels = 1  # enables percentage-based labels inside
-    for i in range(len(pie1.data)):
-        percent = round((pie1.data[i] / total) * 100,2) if total else 0
-        pie1.slices[i].fillColor = palette[i % len(palette)]
-        pie1.labels.append(percent)
-
-    pie2 = Pie()
-    pie2.x = 200
-    pie2.y = 80
-    pie2.width = 110
-    pie2.height = 110
-    pie2.data = result_data
-    total2 = sum(pie2.data)
-    pie2.labels = []
-    pie2.simpleLabels = 1
-    for i in range(len(pie2.data)):
-        percent = round((pie2.data[i] / total2) * 100,2) if total2 else 0
-        pie2.slices[i].fillColor = palette[i % len(palette)]
-        pie2.labels.append(percent)
-
-    drawing.add(pie1)
-    drawing.add(pie2)
-
-    # === Legend ===
-    legend_y = 10
-    legend_x = 10
-    spacing = 65
-    box_size = 8
-
-    for i, label in enumerate(cat_labels):
-        x_pos = legend_x + (i % 5) * spacing
-        y_pos = legend_y - (i // 5) * 12
-        drawing.add(Rect(x_pos, y_pos, box_size, box_size, fillColor=palette[i % len(palette)]))
-        drawing.add(String(x_pos + box_size + 3, y_pos, label, fontSize=6))
-
-    return drawing
 
 def create_detailed_heatmap(combined_results, cell_width=5, cell_height=5, padding=1):
     """
@@ -443,6 +364,105 @@ def create_detailed_heatmap(combined_results, cell_width=5, cell_height=5, paddi
         drawing.add(String(x_pos + 8, legend_y, label, fontSize=5, fillColor=colors.black))
 
     return drawing
+
+def create_attack_type_piechart(attack_list, width=300, height=200):
+    """Create a pie chart of attack categories based on ATTACK_LIST grouping."""
+    CATEGORY_SPLITS = {
+        "Handshake & Protocol Validation": (0, 22),
+        "Payload Handling & Fragmentation": (22, 40),
+        "Authentication & Sessions": (40, 47),
+        "Subprotocol & Extension Negotiation": (47, 52),
+        "Transport Security & Encryption": (52, 57),
+        "Protocol Fuzzing": (57, 58),
+        "DoS & Resource Limits": (58, 66),
+        "Cross-Origin & Browser Risks": (66, 72),
+        "Application-Layer Vulnerabilities": (72, 78)
+    }
+
+    category_counts = {}
+    for category, (start, end) in CATEGORY_SPLITS.items():
+        count = end - start
+        category_counts[category] = count
+
+    data = list(category_counts.values())
+    labels = list(category_counts.keys())
+
+    drawing = Drawing(width, height)
+    pie = Pie()
+    pie.x = 65
+    pie.y = 15
+    pie.width = 170
+    pie.height = 170
+    pie.data = data
+    pie.labels = [f"{label} ({count})" for label, count in zip(labels, data)]
+    pie.slices.strokeWidth = 0.5
+    pie.sideLabels = True
+
+    drawing.add(pie)
+    return drawing
+
+
+def create_attack_type_piechart(attack_list, width=400, height=220):
+    CATEGORY_SPLITS = {
+        "Handshake": (0, 22),
+        "Auth/Sessions": (40, 47),
+        "Subprotocols": (47, 52),
+        "Transport Security": (52, 57),
+        "Payload": (22, 40),
+        "Cross-Origin": (66, 72),
+        "Application": (72, 78),
+        "DoS": (57, 66),
+        "Fuzzing": (78, 90)
+    }
+
+    palette = [
+        colors.HexColor("#c50c0f"), colors.HexColor("#195587"),
+        colors.HexColor("#287d25"), colors.HexColor("#631b6e"),
+        colors.HexColor("#ff8000"), colors.HexColor("#ffff33"),
+        colors.HexColor("#612909"), colors.HexColor("#d40774"),
+        colors.HexColor("#999999")
+    ]
+
+    category_counts = {cat: end - start for cat, (start, end) in CATEGORY_SPLITS.items()}
+    data = list(category_counts.values())
+    labels = list(category_counts.keys())
+
+    drawing = Drawing(width, height)
+
+    # 🥧 Pie chart
+    pie = Pie()
+    pie.x = 50        # shifted slightly left to make room for legend
+    pie.y = 50
+    pie.width = 150
+    pie.height = 150
+    pie.startAngle = 90
+    pie.direction = 'clockwise'
+    pie.data = data
+    pie.labels = []  # ❌ no side labels
+    pie.simpleLabels = 1
+    pie.sideLabels = False
+    pie.slices.strokeWidth = 0.5
+
+    for i in range(len(data)):
+        pie.slices[i].fillColor = palette[i % len(palette)]
+
+    drawing.add(pie)
+
+    # 📋 Legend on the right
+    legend_start_x = pie.x + pie.width + 60  # spacing to the right
+    legend_start_y = pie.y + pie.height - 10
+    box_size = 7
+    line_spacing = 14
+
+    for i, (label, count) in enumerate(category_counts.items()):
+        y = legend_start_y - i * line_spacing
+        color = palette[i % len(palette)]
+        drawing.add(Rect(legend_start_x, y, box_size, box_size, fillColor=color, strokeColor=colors.black))
+        drawing.add(String(legend_start_x + box_size + 4, y, f"{label} ({count})", fontSize=11))
+
+    return drawing
+
+
 
 def generate_pdf_report(combined_results):
     """Generates a combined PDF report with charts for multiple URLs"""
@@ -604,39 +624,6 @@ def generate_pdf_report(combined_results):
         elements.append(urls_table)
         elements.append(Spacer(1, 20))
 
-
-        # # Vulnerability Distribution Chart
-        # vuln_counts = [
-        #     combined_results.get('total_vulnerabilities', {}).get('High', 0),
-        #     combined_results.get('total_vulnerabilities', {}).get('Medium', 0),
-        #     combined_results.get('total_vulnerabilities', {}).get('Low', 0)
-        # ]
-        
-        # elements.append(create_bar_chart(
-        #     vuln_counts,
-        #     categories=['High', 'Medium', 'Low'],
-        #     colors_list=[colors.red, colors.orange, colors.green],
-        #     width=380,     # narrower width to fit within margins
-        #     height=180,    # optional, keeps consistent sizing
-        #     title="Vulnerability Distribution by Severity"
-        # ))
-# === Heatmap Section ===
-#         elements.append(Paragraph("Vulnerability Heatmap by Website", heading2_style))
-#         elements.append(Spacer(1, 10))
-
-# # Build data for heatmap: {site: {"High": x, "Medium": y, "Low": z}, ...}
-#         heatmap_data = {}
-#         for url, details in combined_results.get("detailed_results", {}).items():
-#             all_vulns = [v for vulns in details.get("vulnerabilities", {}).values() for v in vulns]
-#             heatmap_data[url] = {
-#                 "High": sum(1 for v in all_vulns if v.get("risk") == "High"),
-#                 "Medium": sum(1 for v in all_vulns if v.get("risk") == "Medium"),
-#                 "Low": sum(1 for v in all_vulns if v.get("risk") == "Low")
-#             }
-
-#         elements.append(create_heatmap(heatmap_data))
-#         elements.append(Spacer(1, 30))
-
         heatmap = create_detailed_heatmap(combined_results)
         elements.append(Paragraph("WebSocket vs. Attack Heatmap", heading2_style))
         elements.append(Spacer(1, 10))
@@ -676,6 +663,7 @@ def generate_pdf_report(combined_results):
         ]))
         
         elements.append(type_table)        
+        elements.append(Spacer(1, 20))
         # Vulnerability Type Distribution Chart
         type_counts = [v for v in vuln_types.values()]
         type_categories = list(vuln_types.keys())
@@ -687,22 +675,10 @@ def generate_pdf_report(combined_results):
             height=250,
             width=380
         ))
-        elements.append(Spacer(1, 30))
-
-        # drawing = create_attack_type_piechart(ATTACK_LIST)
-        # elements.append(Paragraph("Test Type Distribution", heading2_style))
-        # elements.append(drawing)
-        # drawing = create_attack_results_piechart(combined_results["dict_total_errors"])
-        # elements.append(Paragraph("Attack Result Summary", heading2_style))
-        # elements.append(drawing)
+        
         elements.append(PageBreak())
-
-        elements.append(Paragraph("Test Distribution vs Results", heading2_style))
-        elements.append(create_side_by_side_pies_with_legend(
-            combined_results["dict_total_errors"],
-            ATTACK_LIST
-        ))
-        elements.append(Spacer(1, 30))
+        elements.append(Paragraph("Test Type Distribution", heading2_style))
+        elements.append(create_attack_type_piechart(ATTACK_LIST))
         elements.append(PageBreak())
         elements.append(Paragraph("Detailed Scan Results", heading2_style))
         elements.append(Spacer(1, 20))
@@ -781,26 +757,6 @@ def generate_pdf_report(combined_results):
             elements.append(ws_table)
             elements.append(Spacer(1, 30))
 
-            # # === Crawled URLs Table ===
-            # elements.append(Paragraph("Crawled URLs:", heading2_style))
-            # elements.append(Spacer(1, 15))
-
-    #         crawled_urls_data = [["#", "URL"]]
-    #         for idx, crawled_url in enumerate(url_result.get('crawled_urls', []), 1):
-    #             crawled_urls_data.append([str(idx), crawled_url])
-
-    #         wrapped_crawled_data = [[create_wrapped_cell(cell, width=40) for cell in row] for row in crawled_urls_data]
-    #         crawled_table = Table(wrapped_crawled_data, colWidths=[0.5*inch, 5.5*inch])
-    #         crawled_table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
-    # ('TEXTCOLOR', (0, 0), (-1, -1), colors.black),
-    # ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
-    # ('FONTNAME', (0, 0), (-1, -1), 'Helvetica'),
-    # ('FONTSIZE', (0, 0), (-1, -1), 10),
-    # ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
-    # ('TOPPADDING', (0, 0), (-1, -1), 12),
-    # ('GRID', (0, 0), (-1, -1), 1, colors.black)]))  # keep same style
-    #         elements.append(crawled_table)
-    #         elements.append(Spacer(1, 30))
 
             # === Vulnerabilities Chart for this URL ===
             url_vuln_counts = [
