@@ -94,7 +94,7 @@ def create_bar_chart(data, width=380, height=250, title="", categories=None, col
     for i, val in enumerate(data,1):
         lbl = Label()
         lbl.setOrigin(
-            bc.x + (bc.width/9) * i - 20,
+            bc.x + (bc.width/len(wrapped_labels)) * i - (bc.width/len(wrapped_labels))/2,
             bc.y + (val / bc.valueAxis.valueMax) * bc.height + 5  # Y-position slightly above the bar
         )
         lbl.boxAnchor = 's'
@@ -508,9 +508,9 @@ def generate_pdf_report(combined_results):
         style_author = ParagraphStyle('MyAuthor', parent=styles['Normal'], fontSize=16, alignment=1,spaceAfter=8)
 
         # Paragraphs
-        front_title = Paragraph("Websocket Endpoint Analysis Report", style_title)
+        front_title = Paragraph("Websocket Endpoint Vulnerability Analysis Report", style_title)
         subtitle = Paragraph(
-            "Insecure WebSocket Implementations: Crawling Public Sites, Testing Endpoints for Vulnerabilities, and Reporting Impact Analysis",
+            "Testing Insecure WebSocket Implementations: Crawling Public Sites, Testing Endpoints for Vulnerabilities, and Reporting Impact Analysis",
             style_subtitle
         )
         report_date = Paragraph(f"Report Generated on :  {datetime.today().strftime('%B %d, %Y')}", style_date)
@@ -544,7 +544,7 @@ def generate_pdf_report(combined_results):
 
         # Title and Executive Summary
         elements.append(Paragraph("WebSocket Security Scan Report", title_style))
-        elements.append(Spacer(1, 30))
+        elements.append(Spacer(1, 10))
         
         elements.append(Paragraph("Executive Summary", heading2_style))
         elements.append(Paragraph(
@@ -554,16 +554,16 @@ def generate_pdf_report(combined_results):
         elements.append(Spacer(1, 5))
 
         elements.append(Paragraph(
-            "To address this, we developed an automated scanner that crawls public web applications, detects vulnerable WebSocket endpoints, and analyzes their real-world impact.",
+            "To address this, we developed an automated scanner that crawls public web applications, detects vulnerable WebSocket endpoints, and analyzes potential security threats. The program does the following: ",
             styles['Normal']
         ))
-        elements.append(Spacer(1, 15))
+        elements.append(Spacer(1, 5))
 
 # Solution Summary
         solution_points = [
         "• Crawl and detect active WebSocket endpoints from public websites.",
-        "• Apply origin-header enforcement and protocol fuzzing tests to assess security gaps.",
-        "• Generate structured PDF reports summarizing detected vulnerabilities and severity."
+        "• Apply 90 specialized tests for WebSockets to assess security gaps.",
+        "• Generate a structured PDF report summarizing detected vulnerabilities and severity."
 ]
         for point in solution_points:
             elements.append(Paragraph(point, styles['Normal']))
@@ -594,13 +594,12 @@ def generate_pdf_report(combined_results):
 
         
         elements.append(summary_table)
-        elements.append(Spacer(1, 30))
+        elements.append(PageBreak())
 
         # === All Scanned Websites Section ===
-        elements.append(Paragraph("All Scanned Websites", heading2_style))
+        elements.append(Paragraph("Quick Insights", heading2_style))
         elements.append(Paragraph(
-            "This section lists all scanned websites and summarizes the overall vulnerability distribution by severity. "
-            "The bar graph below visualizes the number of High, Medium, and Low severity vulnerabilities identified across all scanned sites.",
+            "This section lists all scanned websites, shows the overall vulnerability test distribution by category with a pie chart, displays a heatmap which shows how the WebSockets of a website responded to the attacks, and shows the overall count of vulnerabilities found by category in a tabular form and through a bar chart. These quick insights can be used for analysis at a glance and understanding patterns in security issues easily.",
         styles['Normal']
         ))
         elements.append(Spacer(1, 10))
@@ -622,29 +621,20 @@ def generate_pdf_report(combined_results):
             ('GRID', (0, 0), (-1, -1), 0.5, colors.black)
         ]))
         elements.append(urls_table)
-        elements.append(Spacer(1, 20))
+        elements.append(Spacer(1, 10))
+        elements.append(Paragraph("Test Type Distribution", heading2_style))
+        elements.append(create_attack_type_piechart(ATTACK_LIST))
 
         heatmap = create_detailed_heatmap(combined_results)
         elements.append(Paragraph("WebSocket vs. Attack Heatmap", heading2_style))
         elements.append(Spacer(1, 10))
         elements.append(heatmap)
-        elements.append(Spacer(1, 30))
+        elements.append(PageBreak())
 
         # Vulnerability Summary by Type
         elements.append(Paragraph("Vulnerability Summary by Type", heading2_style))
         elements.append(Spacer(1, 10))
 
-        elements.append(Paragraph(
-            "This section summarizes key categories of vulnerabilities found during the scan. It groups issues like missing origin checks, weak authentication, insecure handshakes, and over 80 other attack for test to highlight common WebSocket flaws.",
-        styles['Normal']
-        ))
-        elements.append(Spacer(1, 8))
-
-        elements.append(Paragraph(
-            "The bar chart below visualizes how many vulnerabilities were found in each category. This helps quickly identify the most common and critical problem areas across scanned applications.",
-        styles['Normal']
-        ))
-        elements.append(Spacer(1, 15))
         
         vuln_types = combined_results["dict_total_errors"]
         
@@ -677,21 +667,18 @@ def generate_pdf_report(combined_results):
         ))
         
         elements.append(PageBreak())
-        elements.append(Paragraph("Test Type Distribution", heading2_style))
-        elements.append(create_attack_type_piechart(ATTACK_LIST))
-        elements.append(PageBreak())
         elements.append(Paragraph("Detailed Scan Results", heading2_style))
         elements.append(Spacer(1, 20))
 
         # Description paragraph for Detailed Scan Results section
         details_para_text = (
-            "This section provides an in-depth breakdown of each scanned target. "
-            "For every URL, it lists the scan duration, number of URLs crawled during reconnaissance, "
-            "and the WebSocket endpoints discovered. It helps identify how many potential communication "
+            "This section provides an in-depth breakdown of each scanned URL. "
+            "For every URL, it lists the scan duration, number of URLs crawled, "
+            "and the number of WebSocket endpoints discovered. It helps identify how many potential communication "
             "channels were exposed for testing. Each target's vulnerability distribution is summarized "
-            "by severity (High, Medium, Low) using a bar chart, followed by a detailed list of detected vulnerabilities. "
-            "The section also documents the types of attacks performed and the exact WebSocket endpoints and internal URLs "
-            "involved in the scan. This allows for a thorough understanding of the security posture and exposure of each target."
+            "by severity (High, Medium, Low) in the table and by a bar chart, followed by a detailed list of detected vulnerabilities. "
+            "This allows for a thorough understanding of the security posture and exposure of each target URL."
+            " It is to be noted that all WebSocket Endpoints are publicly listed and there is no intent to attack or damage servers."
         )
 
         elements.append(Paragraph(details_para_text, styles['Normal']))
@@ -708,17 +695,18 @@ def generate_pdf_report(combined_results):
             for vuln_list in url_result.get('vulnerabilities', {}).values():
                 all_vulns.extend(flatten_vuln_list(vuln_list))
 
-
+            txt = url_result.get('crawl_notes','')
             url_details = [
                 ["Scan Duration:", f"{round(url_result.get('scan_duration', 0), 2)} seconds"],
-                ["URLs Crawled:", str(url_result.get('num_crawled_urls', 0))],
-                ["WebSocket Endpoints Found:", str(url_result.get('num_websockets', 0))],
+                ["WebSocket Endpoints Found via Crawling:", str(url_result.get('num_websockets', 0))],
                 ["Attack Performed:", "True" if all_vulns else "False"],
                 ["High Severity Findings:", str(sum(1 for v in all_vulns if v.get('risk') == 'High'))],
                 ["Medium Severity Findings:", str(sum(1 for v in all_vulns if v.get('risk') == 'Medium'))],
-                ["Low Severity Findings:", str(sum(1 for v in all_vulns if v.get('risk') == 'Low'))]
+                ["Low Severity Findings:", str(sum(1 for v in all_vulns if v.get('risk') == 'Low'))],
+                ["Note:", f"{txt}"] if txt != '' else []
             ]
-
+            if url_details[-1] == []:
+                url_details.pop()
             wrapped_url_details = [[create_wrapped_cell(cell) for cell in row] for row in url_details]
             url_table = Table(wrapped_url_details, colWidths=[2*inch, 4*inch])
             url_table.setStyle(TableStyle([('BACKGROUND', (0, 0), (-1, 0), colors.lightgrey),
@@ -774,10 +762,10 @@ def generate_pdf_report(combined_results):
                 elements.append(Spacer(1, 15))
 
                 vuln_intro_para = (
-                    "This section lists all vulnerabilities identified during the scan of the target. "
+                    "This section lists all vulnerabilities identified during the scan of the target URL. "
                     "Each entry includes the vulnerability name, its severity (High, Medium, or Low), a description of the issue, "
-                    "recommended solutions, and the affected WebSocket URL or host. This detailed information helps prioritize fixes "
-                    "and understand the exact flaws present in the WebSocket implementation of each target."
+                    "and recommended solutions. This detailed information helps "
+                    "understand the exact flaws present in the WebSocket implementation of each target."
                 )
                 elements.append(Paragraph(vuln_intro_para, styles['Normal']))
                 elements.append(Spacer(1, 10))

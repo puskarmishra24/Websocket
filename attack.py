@@ -1901,7 +1901,7 @@ def test_tls_downgrade(ws_url):
     try:
         parsed_url = urlparse(ws_url)
         if parsed_url.scheme != 'wss':
-            return None  # Only applicable to wss:// URLs
+            return {'name': 'TLS Downgrade', 'risk': 'No'}  # Only applicable to wss:// URLs
         
         # Check if TLS 1.0 is supported
         try:
@@ -1928,7 +1928,7 @@ def test_tls_downgrade(ws_url):
     except ssl.SSLError as e:
                 return {'name': 'TLS Downgrade', 'risk': 'No'}
     except Exception as e:
-                return None
+                return {'name': 'TLS Downgrade', 'risk': 'No'}
     
 def test_insecure_cipher(ws_url):
     """Test if WebSocket accepts insecure ciphers (Vuln #54: Weak TLS Ciphers)."""
@@ -1977,17 +1977,17 @@ def test_insecure_cipher(ws_url):
             }
 
         else:
-                        return {'name': 'Weak TLS Ciphers', 'risk': 'No'}
+            return {'name': 'Weak TLS Ciphers', 'risk': 'No'}
 
     except Exception as e:
-                return {'name': 'Weak TLS Ciphers', 'risk': 'No'}
+            return {'name': 'Weak TLS Ciphers', 'risk': 'No'}
     
 def test_certificate_mismatch(ws_url):
     """Test if WebSocket endpoint's certificate matches the domain (Vuln #56)."""
     try:
         parsed_url = urlparse(ws_url)
         if parsed_url.scheme != 'wss':
-            return None  # Only applicable to wss:// URLs
+            return {'name': 'Certificate Mismatch', 'risk': 'No'}  # Only applicable to wss:// URLs
         host = parsed_url.hostname
         port = parsed_url.port or 443
         # Create a default SSL context to verify the certificate
@@ -2009,8 +2009,8 @@ def test_certificate_mismatch(ws_url):
             'affected_url': ws_url,
             'impact': 'Certificate mismatches can allow man-in-the-middle attacks.'
         }
-    except Exception as e:
-                return {'name': 'Certificate Mismatch', 'risk': 'No'}
+    except Exception:
+        return {'name': 'Certificate Mismatch', 'risk': 'No'}
     
 def test_connection_flood(ws_url):
     """Test if WebSocket server handles rapid concurrent connection flooding (Vuln #56)."""
@@ -2345,7 +2345,7 @@ def test_mixed_content(ws_url):
 
     # We only test if the site uses HTTPS (relevant for mixed content)
         if parsed_url.scheme != 'wss':
-            return None
+            return {'name': 'Mixed Content', 'risk': 'No'}
 
         https_url = f"https://{parsed_url.netloc}/"
         response = requests.get(https_url, timeout=5, allow_redirects=True)
@@ -2364,8 +2364,8 @@ def test_mixed_content(ws_url):
 
         return {'name': 'Mixed Content', 'risk': 'No'}
 
-    except requests.RequestException as e:
-                return {'name': 'Mixed Content', 'risk': 'No'}
+    except Exception:
+        return {'name': 'Mixed Content', 'risk': 'No'}
 
 def test_postmessage_abuse(ws_url):
     """Test if WebSocket endpoint is vulnerable to postMessage abuse (Vuln #68)."""
@@ -2677,200 +2677,6 @@ ws_dos_tests = [
     test_no_compression_negotiation,# 77
     test_no_timeout_policy,         # 78
 ]
-# def perform_websocket_tests(websocket_urls, payloads):
-#     """Perform WebSocket security tests."""
-#     ws_report = {}
-#     di1 = {
-#         "Origin":0,
-#         "Authentication":0,
-#         "Fuzzing":0,
-#         "Handshake":0,
-#         "Payload":0,
-#         "Session":0,
-#         "Subprotocol":0,
-#         "Security":0,
-#         "DOS":0,
-#         "Cross-Origin":0,
-#         "Others":0
-#     }
-#     for ws_url in websocket_urls:
-#         parsed_url = urlparse(ws_url)
-#         host = parsed_url.hostname
-#         scheme = parsed_url.scheme
-#         port = parsed_url.port or (443 if scheme == 'wss' else 80)
-#         path = parsed_url.path or "/"
-#         vulnerabilities = []
-#         i=1
-#         # # 4️⃣ Handshake & HTTP Request Tests (Vuln #1-22)
-#         handshake_res = []
-#         if scheme not in ['ws', 'wss']:
-#             handshake_res.append(
-#                 {
-#                 'name': 'Non-WebSocket Scheme',
-#                 'risk': 'High',
-#                 'description': f"WebSocket URL {ws_url} could be accessed with a non-WebSocket scheme 'http', which should be rejected by the server.",
-#                 'solution': 'Reject connections with non-WebSocket schemes (only allow ws:// or wss://).',
-#                 'affected_url': ws_url,
-#                 'impact': 'Non-WebSocket schemes can lead to protocol misuse if not handled properly.'
-#                 }
-#             )
-#             ws_report[ws_url] = handshake_res
-#             di1['Handshake'] +=1
-#             continue
-        
-#         # Validate port range
-#         try:
-#             port = int(port)  # Ensure port is an integer
-#             if not (0 <= port <= 65535):
-#                 handshake_res.append(
-#                 {
-#                 'name': 'Invalid Port',
-#                 'risk': 'Medium',
-#                 'description': f"WebSocket URL {parsed_url} contains an invalid port, which should be rejected by the server.",
-#                 'solution': 'Ensure server validates port numbers and rejects invalid ones.',
-#                 'affected_url': parsed_url,
-#                 'impact': 'Invalid ports can cause unexpected behavior if not handled.'
-#                 }
-#                 )
-#                 di1['Handshake'] +=1
-#                 ws_report[ws_url] = handshake_res
-#                 continue
-#         except (TypeError, ValueError):
-#             logging.info(f"Invalid port for {ws_url}: {parsed_url.port}. Skipping this URL.")
-#             continue
-            
-#         print("Starting primary checks: Origin Check, Authentication, Protocol Fuzzing")
-#         print(1)
-#         # 1️⃣ Origin Check
-#         origin_result = test_origin_check(ws_url)
-#         if origin_result:
-#             vulnerabilities.append(origin_result)
-#             di1['Origin'] += 1
-#         print(2)
-#         # 2️⃣ Authentication Check
-#         auth_result = test_authentication(ws_url)
-#         if auth_result:
-#             vulnerabilities.append(auth_result)
-#             di1['Authentication'] += 1
-#         print(3)
-#         # 3️⃣ Protocol Fuzzing for each payload
-#         for payload in payloads:
-#             fuzz_result = test_fuzzing(ws_url, payload)
-#             if fuzz_result:
-#                 vulnerabilities.append(fuzz_result)
-#                 di1['Fuzzing'] += 1
-
-#         print("Starting Handshake & HTTP Request Tests")
-        
-#         for test_func in handshake_tests:
-#             print(i)
-#             i+=1
-#             result = test_func(host, port, path,scheme)
-#             if result:
-#                 vulnerabilities.append(result)
-#                 di1['Handshake'] += 1
-#         print(21)
-#         print(22)
-#         i+=2
-#         # 5️⃣ Payload Handling & Fragmentation Tests (Vuln #23-40)
-#         print("Starting Payload Handling & Fragmentation Tests")
-
-#         #it works but get rid of yellow error msg
-#         for test_func in payload_tests:
-#             print(i)
-#             i+=1
-#             result = test_func(ws_url)
-#             if result:
-#                 vulnerabilities.append(result)
-#                 di1['Payload'] += 1
-        
-#         # 6️⃣ Authentication & Session Management Tests (Vuln #41-46)
-#         print("Starting Authentication & Session Management Tests")
-        
-#         for test_func in auth_session_tests:
-#             print(i)
-#             i+=1
-#             result = test_func(ws_url)
-#             if result:
-#                 vulnerabilities.append(result)
-#                 di1['Session'] += 1
-
-#         # 7️⃣ Subprotocol & Extension Tests (Vuln #47-51)
-#         print('Subprotocol & Extension Tests')
-           
-#         # #it works ig but get rid of yellow error msg
-
-#         for test_func in ws_subprotocol_tests:
-#             print(i)
-#             i+=1
-#             result = test_func(ws_url)
-#             if result:
-#                 vulnerabilities.append(result)
-#                 di1['Subprotocol'] += 1
-
-#         for test_func in subprotocol_tests:
-#             print(i)
-#             i+=1
-#             result = test_func(host, port, path)
-#             if result:
-#                 vulnerabilities.append(result)
-#                 di1['Subprotocol'] += 1 
-
-#         # 8️⃣ Security & Encryption Tests (Vuln #52-56)
-#         print('Starting Security & Encryption Tests')
-
-#         for test_func in security_tests:
-#             print(i)
-#             i+=1
-#             result = test_func(host, port, path)
-#             if result:
-#                 vulnerabilities.append(result)
-#                 di1['Security'] += 1
-
-#         for test_func in ws_security_tests:
-#             print(i)
-#             i+=1
-#             result = test_func(ws_url)
-#             if result:
-#                 vulnerabilities.append(result)
-#                 di1['Security'] += 1
-
-#         # 9️⃣ DoS & Resource Management Tests (Vuln #57-64)
-#         print('Starting DoS & Resource Management Tests')
-                      
-#         for test_func in ws_dos_tests:
-#             print(i)
-#             i+=1
-#             result = test_func(ws_url)
-#             if result:
-#                 vulnerabilities.append(result)
-#                 di1['DOS'] += 1
-
-#         # 🔟 Cross-Origin & Mixed Content Tests (Vuln #65-69)
-#         print("Starting Cross-Origin & Mixed Content Tests")
-
-#         for test_func in cross_origin_tests:
-#             print(i)
-#             i+=1
-#             result = test_func(ws_url)
-#             if result:
-#                 vulnerabilities.append(result)
-#                 di1['Cross-Origin'] += 1
-
-#         #1️⃣1️⃣ Other Vulnerabilities Tests (Vuln #70-75)
-#         print("Starting Other Vulnerabilities Tests")
-        
-#         for test_func in ws_other_tests:
-#             print(i)
-#             i+=1
-#             result = test_func(ws_url)
-#             if result:
-#                 vulnerabilities.append(result)
-#                 di1['Others'] += 1
-
-#         ws_report[ws_url] = vulnerabilities
-#     print("All tests completed.")
-#     return ws_report, di1
 
 def perform_websocket_tests(key, websocket_urls, payloads):
     """Perform WebSocket security tests concurrently, one thread per WebSocket."""
@@ -2886,8 +2692,7 @@ def perform_websocket_tests(key, websocket_urls, payloads):
         "DoS, Compression & Resource Limits":0,
         "Protocol Fuzzing":0
     }
-    valid_ws = test_working_websocket(websocket_urls)
-    valid_ws = valid_ws[:3]
+    valid_ws = websocket_urls[:3]
     
     def test_one_websocket(ws_url, payloads):
         """Test a single WebSocket URL and return vulnerabilities and category counts."""

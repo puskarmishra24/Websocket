@@ -4,7 +4,7 @@ import report_generator
 import json
 from pprint import pprint
 
-with open('report.dat','rb') as f:
+with open('report1.dat','rb') as f:
     s = pickle.load(f)
 
 def flatten_vulns(vuln_list):

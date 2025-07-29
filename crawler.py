@@ -9,7 +9,7 @@ import logging
 import random
 import json
 import os
-
+import attack
 logging.basicConfig(level=logging.CRITICAL)
 
 # Expanded list of realistic user agents
@@ -321,6 +321,8 @@ async def crawl_website(target_url: str, timeout_seconds: int = 600, max_retries
         logging.error(f"Crawl error: {e}")
         print(colored(f"Crawl error: {e}", "red"))
 
+    websocket_urls = attack.test_working_websocket(websocket_urls)
+    
     if not websocket_urls:
         print(colored("No WebSocket endpoints found.", "yellow"))
     else:

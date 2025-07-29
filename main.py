@@ -73,87 +73,6 @@ async def main():
         return
 
     di = {}
-    # for idx, target_url in enumerate(target_urls,1):
-
-    #     if not target_url.startswith(('http://', 'https://')):
-    #         print(colored(f"[-] Invalid URL: {target_url}. Skipping.", "red"))
-    #         continue
-
-    #     print(colored(f"\n[Scanning {idx}/{len(target_urls)}] {target_url}", "blue", attrs=['bold']))
-    #     print(colored("-" * 60, "blue"))
-    #     start_time = time.time()
-
-    #     # Crawl the website
-    #     print(colored("[*] Crawling website...", "yellow"))
-    #     try:
-    #         crawl_data = await crawler.crawl_website(target_url)
-    #         if not isinstance(crawl_data, dict):
-    #             print(colored("Crawling failed to return expected data structure. Skipping this site.", "red"))
-    #             continue
-
-    #         print(colored(f"[+] Crawling complete: {crawl_data['num_crawls']} URLs, {crawl_data['num_websockets']} WebSocket endpoints", "green"))
-    #         #print(colored("\nCrawled URLs:", "cyan"))
-    #         # for i, url in enumerate(crawl_data['crawled_urls'], 1):
-    #         #     print(colored(f"  {i}. {url}", "white"))
-
-    #         print(colored("\nWebSocket Endpoints:", "blue", attrs=["bold"]))
-                
-
-    #         if crawl_data['websocket_urls'] == []:
-    #             if input_method == "1":
-    #                 manual_ws = input(colored(f"\n[?] No WebSocket endpoints found for {target_url}. Manually specify URLs? (yes/no): ", "yellow")).strip().lower()
-    #                 if manual_ws == "yes":
-                
-    #                     ws_input = input(colored("Enter WebSocket URLs (comma-separated, e.g., wss://example.com/ws): ", "cyan")).strip()
-    #                     if ws_input:
-    #                         websocket_urls = [ws_url.strip() for ws_url in ws_input.split(',')]
-    #                         crawl_data['websocket_urls'].extend(websocket_urls)
-    #                         crawl_data['num_websockets'] = len(websocket_urls)
-    #                         crawl_data['crawl_notes'] += "WebSocket URLs manually specified."
-    #                     else:
-    #                         print(colored("  No URLs entered. Moving to next website...", "yellow"))
-                    
-    #             if input_method == "2":
-    #                 try:
-    #                     index = idx - 1
-    #                     x = safety_sockets[index] if index < len(safety_sockets) else ""
-    #                     if x:
-    #                         print(colored("  None found from crawling. Using fallback WebSocket from CSV: ", "yellow") + x)
-    #                         crawl_data['websocket_urls'].append(x)
-    #                         crawl_data['num_websockets'] = len(crawl_data['websocket_urls'])
-    #                         crawl_data['crawl_notes'] += "WebSocket URL used from CSV file."
-    #                     else:
-    #                         print(colored("  None found and no fallback WebSocket in CSV.", "red"))
-    #                 except Exception as e:
-    #                     print(colored(f"  Error accessing fallback WebSocket: {e}", "red"))
-                
-    #         for i, ws_url in enumerate(crawl_data['websocket_urls'], 1):
-    #             print(colored(f"  {i}. {ws_url}", "white"))
-
-    #         di[target_url] = crawl_data["websocket_urls"]
-    #         scan_duration = time.time() - start_time
-
-    #         url_result = {
-    #         'num_crawled_urls': crawl_data['num_crawls'],
-    #         'crawled_urls': crawl_data['crawled_urls'],
-    #         'num_websockets': len(crawl_data['websocket_urls']),
-    #         'websocket_urls': crawl_data['websocket_urls'],
-    #         'crawl_notes': crawl_data.get('crawl_notes', ''),
-    #         'scan_duration': scan_duration
-    #         }
-    #         combined_results['detailed_results'][target_url] = url_result
-
-    #     except Exception as e:
-    #         print(colored(f"[-] Error crawling {target_url}: {e}", "red"))
-    #         crawl_data = {
-    #             "num_crawls": 0,
-    #             "crawled_urls": [],
-    #             "num_websockets": 0,
-    #             "websocket_urls": [],
-    #             "crawl_notes": f"Error during crawl: {str(e)}"
-
-
-    #         }
 
     CONCURRENCY_LIMIT = 4
     semaphore = asyncio.Semaphore(CONCURRENCY_LIMIT)
@@ -241,7 +160,7 @@ async def main():
             if websocket_urls:
                 di[url] = websocket_urls
                 combined_results["detailed_results"][url]["websocket_urls"] = websocket_urls
-                combined_results["detailed_results"][url]["crawl_notes"] += "WebSocket URLs added post-scan."
+                combined_results["detailed_results"][url]["crawl_notes"] += " WebSocket URLs added post-scan."
                 print(colored(f"    [+] {len(websocket_urls)} WebSocket URL(s) added to {url}", "green"))
             else:
                 print(colored("    [-] No WebSocket endpoints added.", "red"))
